@@ -340,10 +340,13 @@ class OpenAICompatibleProvider(ModelProvider):
                 usage = None
                 if hasattr(response, "usage") and response.usage:
                     # For responses endpoint, usage object has different structure
+                    input_tokens = getattr(response.usage, "input_tokens", 0) or 0
+                    output_tokens = getattr(response.usage, "output_tokens", 0) or 0
+                    total_tokens = getattr(response.usage, "total_tokens", 0) or 0
                     usage = {
-                        "input_tokens": getattr(response.usage, "input_tokens", 0) or 0,
-                        "output_tokens": getattr(response.usage, "output_tokens", 0) or 0,
-                        "total_tokens": getattr(response.usage, "total_tokens", 0) or 0,
+                        "input_tokens": input_tokens,
+                        "output_tokens": output_tokens,
+                        "total_tokens": total_tokens or (input_tokens + output_tokens),
                     }
                     
                     if hasattr(response.usage, "output_tokens_details"):
