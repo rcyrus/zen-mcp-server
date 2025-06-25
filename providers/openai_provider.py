@@ -37,41 +37,41 @@ class OpenAIModelProvider(OpenAICompatibleProvider):
             description="Strong reasoning (200K context) - Logical problems, code generation, systematic analysis",
             aliases=[],
         ),
-        "gpt-4.1-mini": ModelCapabilities(
+        "o3-mini": ModelCapabilities(
             provider=ProviderType.OPENAI,
-            model_name="gpt-4.1-mini",
-            friendly_name="OpenAI (GPT-4.1 Mini)",
+            model_name="o3-mini",
+            friendly_name="OpenAI (O3-mini)",
             context_window=200_000,  # 200K tokens
-            max_output_tokens=32_000,
+            max_output_tokens=65536,  # 64K max output tokens
             supports_extended_thinking=False,
             supports_system_prompts=True,
             supports_streaming=True,
             supports_function_calling=True,
             supports_json_mode=True,
-            supports_images=True,
-            max_image_size_mb=20.0,
-            supports_temperature=True,
-            temperature_constraint=create_temperature_constraint("range"),
-            description="GPT-4.1 Mini - Efficient variant of GPT-4.1",
-            aliases=["gpt-4.1-mini", "gpt4.1-mini"],
-        ),
-        "codex-mini-latest": ModelCapabilities(
-            provider=ProviderType.OPENAI,
-            model_name="codex-mini-latest",
-            friendly_name="OpenAI (Codex Mini)",
-            context_window=200_000,  # 200K tokens
-            max_output_tokens=100_000,  # 100K max output tokens
-            supports_extended_thinking=False,
-            supports_system_prompts=True,
-            supports_streaming=True,
-            supports_function_calling=True,
-            supports_json_mode=True,
-            supports_images=False,  # Codex is text-only
-            max_image_size_mb=0.0,
-            supports_temperature=False,  # Reasoning models don't support temperature
+            supports_images=True,  # O3 models support vision
+            max_image_size_mb=20.0,  # 20MB per OpenAI docs
+            supports_temperature=False,  # O3 models don't accept temperature parameter
             temperature_constraint=create_temperature_constraint("fixed"),
-            description="Fine-tuned o4-mini for Codex CLI - Specialized for code generation and analysis (200K context, reasoning tokens)",
-            aliases=["codex-mini", "codex"],
+            description="Fast O3 variant (200K context) - Balanced performance/speed, moderate complexity",
+            aliases=["o3mini", "o3-mini"],
+        ),
+        "o3-pro-2025-06-10": ModelCapabilities(
+            provider=ProviderType.OPENAI,
+            model_name="o3-pro-2025-06-10",
+            friendly_name="OpenAI (O3-Pro)",
+            context_window=200_000,  # 200K tokens
+            max_output_tokens=65536,  # 64K max output tokens
+            supports_extended_thinking=False,
+            supports_system_prompts=True,
+            supports_streaming=True,
+            supports_function_calling=True,
+            supports_json_mode=True,
+            supports_images=True,  # O3 models support vision
+            max_image_size_mb=20.0,  # 20MB per OpenAI docs
+            supports_temperature=False,  # O3 models don't accept temperature parameter
+            temperature_constraint=create_temperature_constraint("fixed"),
+            description="Professional-grade reasoning (200K context) - EXTREMELY EXPENSIVE: Only for the most complex problems requiring universe-scale complexity analysis OR when the user explicitly asks for this model. Use sparingly for critical architectural decisions or exceptionally complex debugging that other models cannot handle.",
+            aliases=["o3-pro"],
         ),
         "o4-mini": ModelCapabilities(
             provider=ProviderType.OPENAI,
@@ -108,6 +108,42 @@ class OpenAIModelProvider(OpenAICompatibleProvider):
             temperature_constraint=create_temperature_constraint("range"),
             description="GPT-4.1 (1M context) - Advanced reasoning model with large context window",
             aliases=["gpt4.1"],
+        ),
+        "gpt-4.1-mini": ModelCapabilities(
+            provider=ProviderType.OPENAI,
+            model_name="gpt-4.1-mini",
+            friendly_name="OpenAI (GPT-4.1 Mini)",
+            context_window=200_000,  # 200K tokens
+            max_output_tokens=32_000,
+            supports_extended_thinking=False,
+            supports_system_prompts=True,
+            supports_streaming=True,
+            supports_function_calling=True,
+            supports_json_mode=True,
+            supports_images=True,
+            max_image_size_mb=20.0,
+            supports_temperature=True,
+            temperature_constraint=create_temperature_constraint("range"),
+            description="GPT-4.1 Mini - Efficient variant of GPT-4.1",
+            aliases=["gpt-4.1-mini", "gpt4.1-mini"],
+        ),
+        "codex-mini-latest": ModelCapabilities(
+            provider=ProviderType.OPENAI,
+            model_name="codex-mini-latest",
+            friendly_name="OpenAI (Codex Mini)",
+            context_window=200_000,  # 200K tokens
+            max_output_tokens=100_000,  # 100K max output tokens
+            supports_extended_thinking=False,
+            supports_system_prompts=True,
+            supports_streaming=True,
+            supports_function_calling=True,
+            supports_json_mode=True,
+            supports_images=False,  # Codex is text-only
+            max_image_size_mb=0.0,
+            supports_temperature=False,  # Reasoning models don't support temperature
+            temperature_constraint=create_temperature_constraint("fixed"),
+            description="Fine-tuned o4-mini for Codex CLI - Specialized for code generation and analysis (200K context, reasoning tokens)",
+            aliases=["codex-mini", "codex"],
         ),
     }
 

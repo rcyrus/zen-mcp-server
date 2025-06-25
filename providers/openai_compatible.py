@@ -346,7 +346,6 @@ class OpenAICompatibleProvider(ModelProvider):
                         "total_tokens": getattr(response.usage, "total_tokens", 0) or 0,
                     }
                     
-                    # Extract reasoning tokens if available (for models like codex-mini-latest)
                     if hasattr(response.usage, "output_tokens_details"):
                         output_details = response.usage.output_tokens_details
                         if hasattr(output_details, "reasoning_tokens"):
@@ -485,7 +484,7 @@ class OpenAICompatibleProvider(ModelProvider):
                 completion_params[key] = value
 
         # Check if this is a model that requires the responses endpoint
-        if resolved_model in ["o3-pro-2025-06-10", "codex-mini-latest"]:
+        if resolved_model in {"o3-pro-2025-06-10", "codex-mini-latest"}:
             # These models require the /v1/responses endpoint
             # If it fails, we should not fall back to chat/completions
             return self._generate_with_responses_endpoint(
