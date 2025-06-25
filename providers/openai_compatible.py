@@ -347,7 +347,7 @@ class OpenAICompatibleProvider(ModelProvider):
                         "output_tokens": output_tokens,
                         "total_tokens": total_tokens or (input_tokens + output_tokens),
                     }
-                    
+
                     if hasattr(response.usage, "output_tokens_details"):
                         output_details = response.usage.output_tokens_details
                         if hasattr(output_details, "reasoning_tokens"):
