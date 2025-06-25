@@ -320,7 +320,6 @@ class OpenAICompatibleProvider(ModelProvider):
                 # Use OpenAI client's responses endpoint
                 response = self.client.responses.create(**completion_params)
 
-                
                 # Extract content and usage from responses endpoint format
                 # The response format is different for responses endpoint
                 content = ""
