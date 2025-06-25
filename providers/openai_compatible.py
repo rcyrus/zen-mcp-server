@@ -345,6 +345,12 @@ class OpenAICompatibleProvider(ModelProvider):
                         "output_tokens": getattr(response.usage, "output_tokens", 0) or 0,
                         "total_tokens": getattr(response.usage, "total_tokens", 0) or 0,
                     }
+                    
+                    # Extract reasoning tokens if available (for models like codex-mini-latest)
+                    if hasattr(response.usage, "output_tokens_details"):
+                        output_details = response.usage.output_tokens_details
+                        if hasattr(output_details, "reasoning_tokens"):
+                            usage["reasoning_tokens"] = getattr(output_details, "reasoning_tokens", 0) or 0
 
                 return ModelResponse(
                     content=content,
