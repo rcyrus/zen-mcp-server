@@ -324,16 +324,23 @@ class OpenAICompatibleProvider(ModelProvider):
                 # The response format is different for responses endpoint
                 content = ""
                 if hasattr(response, "output") and response.output:
-                    # Look for message type in output array
-                    for output_item in response.output:
-                        if hasattr(output_item, "type") and output_item.type == "message":
-                            if hasattr(output_item, "content") and output_item.content:
-                                # Look for output_text in content
-                                for content_item in output_item.content:
-                                    if hasattr(content_item, "type") and content_item.type == "output_text":
-                                        content = content_item.text
-                                        break
-                            break
+                    # Check if output has content directly (legacy format)
+                    if hasattr(response.output, "content") and response.output.content:
+                        # Legacy format: response.output.content is a list
+                        for content_item in response.output.content:
+                            if hasattr(content_item, "type") and content_item.type == "output_text":
+                                content = content_item.text
+                                break
+                    else:
+                        # New format: response.output is a list
+                        for output_item in response.output:
+                            if hasattr(output_item, "type") and output_item.type == "message":
+                                if hasattr(output_item, "content") and output_item.content:
+                                    for content_item in output_item.content:
+                                        if hasattr(content_item, "type") and content_item.type == "output_text":
+                                            content = content_item.text
+                                            break
+                                break
 
                 # Try to extract usage information
                 usage = None
