@@ -45,8 +45,9 @@ class TestRefactorTool:
                             }
                         ],
                         "priority_sequence": ["refactor-001"],
-                        "next_actions_for_claude": [],
-                    }
+                        "next_actions": [],
+                    },
+                    ensure_ascii=False,
                 )
 
             from unittest.mock import Mock

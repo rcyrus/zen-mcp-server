@@ -2,7 +2,7 @@
 TestGen Workflow tool - Step-by-step test generation with expert validation
 
 This tool provides a structured workflow for comprehensive test generation.
-It guides Claude through systematic investigation steps with forced pauses between each step
+It guides the CLI agent through systematic investigation steps with forced pauses between each step
 to ensure thorough code examination, test planning, and pattern identification before proceeding.
 The tool supports backtracking, finding updates, and expert analysis integration for
 comprehensive test suite generation.
@@ -78,10 +78,11 @@ TESTGEN_WORKFLOW_FIELD_DESCRIPTIONS = {
     ),
     "confidence": (
         "Indicate your current confidence in the test generation assessment. Use: 'exploring' (starting analysis), "
-        "'low' (early investigation), 'medium' (some patterns identified), 'high' (strong understanding), 'certain' "
-        "(only when the test plan is thoroughly complete and all test scenarios are identified). Do NOT use 'certain' "
-        "unless the test generation analysis is comprehensively complete, use 'high' instead not 100% sure. Using "
-        "'certain' prevents additional expert analysis."
+        "'low' (early investigation), 'medium' (some patterns identified), 'high' (strong understanding), "
+        "'very_high' (very strong understanding), 'almost_certain' (nearly complete test plan), 'certain' "
+        "(100% confidence - test plan is thoroughly complete and all test scenarios are identified with no need for external model validation). "
+        "Do NOT use 'certain' unless the test generation analysis is comprehensively complete, use 'very_high' or 'almost_certain' instead if not 100% sure. "
+        "Using 'certain' means you have complete confidence locally and prevents external model validation."
     ),
     "backtrack_from_step": (
         "If an earlier finding or assessment needs to be revised or discarded, specify the step number from which to "
@@ -228,7 +229,7 @@ class TestGenTool(WorkflowTool):
             },
             "confidence": {
                 "type": "string",
-                "enum": ["exploring", "low", "medium", "high", "certain"],
+                "enum": ["exploring", "low", "medium", "high", "very_high", "almost_certain", "certain"],
                 "description": TESTGEN_WORKFLOW_FIELD_DESCRIPTIONS["confidence"],
             },
             "backtrack_from_step": {
@@ -309,26 +310,26 @@ class TestGenTool(WorkflowTool):
     def prepare_expert_analysis_context(self, consolidated_findings) -> str:
         """Prepare context for external model call for test generation validation."""
         context_parts = [
-            f"=== TEST GENERATION REQUEST ===\\n{self.initial_request or 'Test generation workflow initiated'}\\n=== END REQUEST ==="
+            f"=== TEST GENERATION REQUEST ===\n{self.initial_request or 'Test generation workflow initiated'}\n=== END REQUEST ==="
         ]
 
         # Add investigation summary
         investigation_summary = self._build_test_generation_summary(consolidated_findings)
         context_parts.append(
-            f"\\n=== CLAUDE'S TEST PLANNING INVESTIGATION ===\\n{investigation_summary}\\n=== END INVESTIGATION ==="
+            f"\n=== AGENT'S TEST PLANNING INVESTIGATION ===\n{investigation_summary}\n=== END INVESTIGATION ==="
         )
 
         # Add relevant code elements if available
         if consolidated_findings.relevant_context:
-            methods_text = "\\n".join(f"- {method}" for method in consolidated_findings.relevant_context)
-            context_parts.append(f"\\n=== CODE ELEMENTS TO TEST ===\\n{methods_text}\\n=== END CODE ELEMENTS ===")
+            methods_text = "\n".join(f"- {method}" for method in consolidated_findings.relevant_context)
+            context_parts.append(f"\n=== CODE ELEMENTS TO TEST ===\n{methods_text}\n=== END CODE ELEMENTS ===")
 
         # Add images if available
         if consolidated_findings.images:
-            images_text = "\\n".join(f"- {img}" for img in consolidated_findings.images)
-            context_parts.append(f"\\n=== VISUAL DOCUMENTATION ===\\n{images_text}\\n=== END VISUAL DOCUMENTATION ===")
+            images_text = "\n".join(f"- {img}" for img in consolidated_findings.images)
+            context_parts.append(f"\n=== VISUAL DOCUMENTATION ===\n{images_text}\n=== END VISUAL DOCUMENTATION ===")
 
-        return "\\n".join(context_parts)
+        return "\n".join(context_parts)
 
     def _build_test_generation_summary(self, consolidated_findings) -> str:
         """Prepare a comprehensive summary of the test generation investigation."""
@@ -388,7 +389,7 @@ class TestGenTool(WorkflowTool):
 
     def should_skip_expert_analysis(self, request, consolidated_findings) -> bool:
         """
-        Test generation workflow skips expert analysis when Claude has "certain" confidence.
+        Test generation workflow skips expert analysis when the CLI agent has "certain" confidence.
         """
         return request.confidence == "certain" and not request.next_step_required
 
@@ -425,7 +426,7 @@ class TestGenTool(WorkflowTool):
 
     def get_skip_reason(self) -> str:
         """Test generation-specific skip reason."""
-        return "Claude completed comprehensive test planning with full confidence"
+        return "Completed comprehensive test planning with full confidence locally"
 
     def get_skip_expert_analysis_status(self) -> str:
         """Test generation-specific expert analysis skip status."""

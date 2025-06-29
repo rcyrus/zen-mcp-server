@@ -512,7 +512,7 @@ bootstrap_pip() {
     print_info "Bootstrapping pip in virtual environment..."
     
     # Try ensurepip first
-    if $venv_python -m ensurepip --default-pip 2>/dev/null; then
+    if $venv_python -m ensurepip --default-pip >/dev/null 2>&1; then
         print_success "Successfully bootstrapped pip using ensurepip"
         return 0
     fi
@@ -579,6 +579,17 @@ setup_environment() {
             if venv_python=$(get_venv_python_path "$VENV_PATH"); then
                 touch "$VENV_PATH/uv_created"  # Mark as uv-created
                 print_success "Created environment with uv using Python 3.12"
+                
+                # Ensure pip is installed in uv environment
+                if ! $venv_python -m pip --version &>/dev/null 2>&1; then
+                    print_info "Installing pip in uv environment..."
+                    # uv doesn't install pip by default, use bootstrap method
+                    if bootstrap_pip "$venv_python" "python3"; then
+                        print_success "pip installed in uv environment"
+                    else
+                        print_warning "Failed to install pip in uv environment"
+                    fi
+                fi
             else
                 print_warning "uv succeeded but Python executable not found in venv"
             fi
@@ -589,6 +600,17 @@ setup_environment() {
                 touch "$VENV_PATH/uv_created"  # Mark as uv-created
                 local python_version=$($venv_python --version 2>&1)
                 print_success "Created environment with uv using $python_version"
+                
+                # Ensure pip is installed in uv environment
+                if ! $venv_python -m pip --version &>/dev/null 2>&1; then
+                    print_info "Installing pip in uv environment..."
+                    # uv doesn't install pip by default, use bootstrap method
+                    if bootstrap_pip "$venv_python" "python3"; then
+                        print_success "pip installed in uv environment"
+                    else
+                        print_warning "Failed to install pip in uv environment"
+                    fi
+                fi
             else
                 print_warning "uv succeeded but Python executable not found in venv"
             fi
@@ -755,8 +777,10 @@ setup_venv() {
         exit 1
     fi
     
-    # Check if pip exists in the virtual environment (skip check if using uv-created environment)
-    if [[ ! -f "$VENV_PATH/uv_created" ]] && [[ ! -f "$venv_pip" ]] && ! $venv_python -m pip --version &>/dev/null 2>&1; then
+    # Always check if pip exists in the virtual environment (regardless of how it was created)
+    if [[ ! -f "$venv_pip" ]] && ! $venv_python -m pip --version &>/dev/null 2>&1; then
+        print_warning "pip not found in virtual environment, installing..."
+        
         # On Linux, try to install system packages if pip is missing
         local os_type=$(detect_os)
         if [[ "$os_type" == "linux" || "$os_type" == "wsl" ]]; then
@@ -838,8 +862,8 @@ install_dependencies() {
     local python_cmd="$1"
     local deps_needed=false
     
-    # First verify pip is available (skip check if using uv)
-    if [[ ! -f "$VENV_PATH/uv_created" ]] && ! $python_cmd -m pip --version &>/dev/null 2>&1; then
+    # First verify pip is available (always check, even for uv environments)
+    if ! $python_cmd -m pip --version &>/dev/null 2>&1; then
         print_error "pip is not available in the Python environment"
         echo ""
         echo "This indicates an incomplete Python installation."
@@ -1298,10 +1322,107 @@ EOF
     fi
 }
 
+# Check and update Gemini CLI configuration
+check_gemini_cli_integration() {
+    local script_dir="$1"
+    local zen_wrapper="$script_dir/zen-mcp-server"
+    
+    # Check if Gemini settings file exists
+    local gemini_config="$HOME/.gemini/settings.json"
+    if [[ ! -f "$gemini_config" ]]; then
+        # Gemini CLI not installed or not configured
+        return 0
+    fi
+    
+    # Check if zen is already configured
+    if grep -q '"zen"' "$gemini_config" 2>/dev/null; then
+        # Already configured
+        return 0
+    fi
+    
+    # Ask user if they want to add Zen to Gemini CLI
+    echo ""
+    read -p "Configure Zen for Gemini CLI? (Y/n): " -n 1 -r
+    echo ""
+    if [[ $REPLY =~ ^[Nn]$ ]]; then
+        print_info "Skipping Gemini CLI integration"
+        return 0
+    fi
+    
+    # Ensure wrapper script exists
+    if [[ ! -f "$zen_wrapper" ]]; then
+        print_info "Creating wrapper script for Gemini CLI..."
+        cat > "$zen_wrapper" << 'EOF'
+#!/bin/bash
+# Wrapper script for Gemini CLI compatibility
+DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$DIR"
+exec .zen_venv/bin/python server.py "$@"
+EOF
+        chmod +x "$zen_wrapper"
+        print_success "Created zen-mcp-server wrapper script"
+    fi
+    
+    # Update Gemini settings
+    print_info "Updating Gemini CLI configuration..."
+    
+    # Create backup
+    cp "$gemini_config" "${gemini_config}.backup_$(date +%Y%m%d_%H%M%S)"
+    
+    # Add zen configuration using Python for proper JSON handling
+    local temp_file=$(mktemp)
+    python3 -c "
+import json
+import sys
+
+try:
+    with open('$gemini_config', 'r') as f:
+        config = json.load(f)
+    
+    # Ensure mcpServers exists
+    if 'mcpServers' not in config:
+        config['mcpServers'] = {}
+    
+    # Add zen server
+    config['mcpServers']['zen'] = {
+        'command': '$zen_wrapper'
+    }
+    
+    with open('$temp_file', 'w') as f:
+        json.dump(config, f, indent=2)
+        
+except Exception as e:
+    print(f'Error processing config: {e}', file=sys.stderr)
+    sys.exit(1)
+" && mv "$temp_file" "$gemini_config"
+    
+    if [[ $? -eq 0 ]]; then
+        print_success "Successfully configured Gemini CLI"
+        echo "  Config: $gemini_config"
+        echo "  Restart Gemini CLI to use Zen MCP Server"
+    else
+        print_error "Failed to update Gemini CLI config"
+        echo "Manual config location: $gemini_config"
+        echo "Add this configuration:"
+        cat << EOF
+{
+  "mcpServers": {
+    "zen": {
+      "command": "$zen_wrapper"
+    }
+  }
+}
+EOF
+    fi
+}
+
 # Display configuration instructions
 display_config_instructions() {
     local python_cmd="$1"
     local server_path="$2"
+    
+    # Get script directory for Gemini CLI config
+    local script_dir=$(dirname "$server_path")
     
     echo ""
     local config_header="ZEN MCP SERVER CONFIGURATION"
@@ -1339,6 +1460,20 @@ EOF
     
     echo ""
     print_info "3. Restart Claude Desktop after updating the config file"
+    echo ""
+    
+    print_info "For Gemini CLI:"
+    echo "   Add this configuration to ~/.gemini/settings.json:"
+    echo ""
+    cat << EOF
+   {
+     "mcpServers": {
+       "zen": {
+         "command": "$script_dir/zen-mcp-server"
+       }
+     }
+   }
+EOF
     echo ""
 }
 
@@ -1509,7 +1644,10 @@ main() {
     check_claude_cli_integration "$python_cmd" "$server_path"
     check_claude_desktop_integration "$python_cmd" "$server_path"
     
-    # Step 10: Display log information
+    # Step 10: Check Gemini CLI integration
+    check_gemini_cli_integration "$script_dir"
+    
+    # Step 11: Display log information
     echo ""
     echo "Logs will be written to: $script_dir/$LOG_DIR/$LOG_FILE"
     echo ""
@@ -1522,7 +1660,7 @@ main() {
         echo "To show config: ./run-server.sh -c"
         echo "To update: git pull, then run ./run-server.sh again"
         echo ""
-        echo "Happy Clauding! 🎉"
+        echo "Happy coding! 🎉"
     fi
 }
 

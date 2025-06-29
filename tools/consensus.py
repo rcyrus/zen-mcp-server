@@ -2,12 +2,12 @@
 Consensus tool - Step-by-step multi-model consensus with expert analysis
 
 This tool provides a structured workflow for gathering consensus from multiple models.
-It guides Claude through systematic steps where Claude first provides its own analysis,
+It guides the CLI agent through systematic steps where the CLI agent first provides its own analysis,
 then consults each requested model one by one, and finally synthesizes all perspectives.
 
 Key features:
 - Step-by-step consensus workflow with progress tracking
-- Claude's initial neutral analysis followed by model-specific consultations
+- The CLI agent's initial neutral analysis followed by model-specific consultations
 - Context-aware file embedding
 - Support for stance-based analysis (for/against/neutral)
 - Final synthesis combining all perspectives
@@ -80,10 +80,6 @@ CONSENSUS_WORKFLOW_FIELD_DESCRIPTIONS = {
 }
 
 
-class ModelConfig(dict):
-    """Model configuration for consensus workflow"""
-
-
 class ConsensusRequest(WorkflowRequest):
     """Request model for consensus workflow steps"""
 
@@ -95,7 +91,7 @@ class ConsensusRequest(WorkflowRequest):
 
     # Investigation tracking fields
     findings: str = Field(..., description=CONSENSUS_WORKFLOW_FIELD_DESCRIPTIONS["findings"])
-    confidence: str | None = Field("exploring", exclude=True)  # Not used in consensus workflow
+    confidence: str = Field(default="exploring", exclude=True, description="Not used")
 
     # Consensus-specific fields (only needed in step 1)
     models: list[dict] | None = Field(None, description=CONSENSUS_WORKFLOW_FIELD_DESCRIPTIONS["models"])
@@ -114,8 +110,10 @@ class ConsensusRequest(WorkflowRequest):
         description=CONSENSUS_WORKFLOW_FIELD_DESCRIPTIONS["model_responses"],
     )
 
+    # Optional images for visual debugging
+    images: list[str] | None = Field(default=None, description=CONSENSUS_WORKFLOW_FIELD_DESCRIPTIONS["images"])
+
     # Override inherited fields to exclude them from schema
-    model: str | None = Field(default=None, exclude=True)  # Consensus uses 'models' field instead
     temperature: float | None = Field(default=None, exclude=True)
     thinking_mode: str | None = Field(default=None, exclude=True)
     use_websearch: bool | None = Field(default=None, exclude=True)
@@ -126,7 +124,6 @@ class ConsensusRequest(WorkflowRequest):
     issues_found: list[dict] | None = Field(default_factory=list, exclude=True)
     hypothesis: str | None = Field(None, exclude=True)
     backtrack_from_step: int | None = Field(None, exclude=True)
-    images: list[str] | None = Field(default_factory=list)  # Enable images for consensus workflow
 
     @model_validator(mode="after")
     def validate_step_one_requirements(self):
@@ -156,7 +153,7 @@ class ConsensusTool(WorkflowTool):
     """
     Consensus workflow tool for step-by-step multi-model consensus gathering.
 
-    This tool implements a structured consensus workflow where Claude first provides
+    This tool implements a structured consensus workflow where the CLI agent first provides
     its own neutral analysis, then consults each specified model individually,
     and finally synthesizes all perspectives into a unified recommendation.
     """
@@ -174,25 +171,25 @@ class ConsensusTool(WorkflowTool):
     def get_description(self) -> str:
         return (
             "COMPREHENSIVE CONSENSUS WORKFLOW - Step-by-step multi-model consensus with structured analysis. "
-            "This tool guides you through a systematic process where you:\\n\\n"
-            "1. Start with step 1: provide your own neutral analysis of the proposal\\n"
-            "2. The tool will then consult each specified model one by one\\n"
-            "3. You'll receive each model's response in subsequent steps\\n"
-            "4. Track and synthesize perspectives as they accumulate\\n"
-            "5. Final step: present comprehensive consensus and recommendations\\n\\n"
-            "IMPORTANT: This workflow enforces sequential model consultation:\\n"
-            "- Step 1 is always your independent analysis\\n"
-            "- Each subsequent step processes one model response\\n"
-            "- Total steps = number of models (each step includes consultation + response)\\n"
-            "- Models can have stances (for/against/neutral) for structured debate\\n"
-            "- Same model can be used multiple times with different stances\\n"
-            "- Each model + stance combination must be unique\\n\\n"
+            "This tool guides you through a systematic process where you:\n\n"
+            "1. Start with step 1: provide your own neutral analysis of the proposal\n"
+            "2. The tool will then consult each specified model one by one\n"
+            "3. You'll receive each model's response in subsequent steps\n"
+            "4. Track and synthesize perspectives as they accumulate\n"
+            "5. Final step: present comprehensive consensus and recommendations\n\n"
+            "IMPORTANT: This workflow enforces sequential model consultation:\n"
+            "- Step 1 is always your independent analysis\n"
+            "- Each subsequent step processes one model response\n"
+            "- Total steps = number of models (each step includes consultation + response)\n"
+            "- Models can have stances (for/against/neutral) for structured debate\n"
+            "- Same model can be used multiple times with different stances\n"
+            "- Each model + stance combination must be unique\n\n"
             "Perfect for: complex decisions, architectural choices, feature proposals, "
             "technology evaluations, strategic planning."
         )
 
     def get_system_prompt(self) -> str:
-        # For Claude's initial analysis, use a neutral version of the consensus prompt
+        # For the CLI agent's initial analysis, use a neutral version of the consensus prompt
         return CONSENSUS_PROMPT.replace(
             "{stance_prompt}",
             """BALANCED PERSPECTIVE
@@ -230,8 +227,9 @@ of the evidence, even when it strongly points in one direction.""",
         """Generate input schema for consensus workflow."""
         from .workflow.schema_builders import WorkflowSchemaBuilder
 
-        # Consensus workflow-specific field overrides
+        # Consensus tool-specific field definitions
         consensus_field_overrides = {
+            # Override standard workflow fields that need consensus-specific descriptions
             "step": {
                 "type": "string",
                 "description": CONSENSUS_WORKFLOW_FIELD_DESCRIPTIONS["step"],
@@ -259,6 +257,7 @@ of the evidence, even when it strongly points in one direction.""",
                 "items": {"type": "string"},
                 "description": CONSENSUS_WORKFLOW_FIELD_DESCRIPTIONS["relevant_files"],
             },
+            # consensus-specific fields (not in base workflow)
             "models": {
                 "type": "array",
                 "items": {
@@ -289,31 +288,33 @@ of the evidence, even when it strongly points in one direction.""",
             },
         }
 
-        # Build schema without standard workflow fields we don't use
+        # Define excluded fields for consensus workflow
+        excluded_workflow_fields = [
+            "files_checked",  # Not used in consensus workflow
+            "relevant_context",  # Not used in consensus workflow
+            "issues_found",  # Not used in consensus workflow
+            "hypothesis",  # Not used in consensus workflow
+            "backtrack_from_step",  # Not used in consensus workflow
+            "confidence",  # Not used in consensus workflow
+        ]
+
+        excluded_common_fields = [
+            "model",  # Consensus uses 'models' field instead
+            "temperature",  # Not used in consensus workflow
+            "thinking_mode",  # Not used in consensus workflow
+            "use_websearch",  # Not used in consensus workflow
+        ]
+
+        # Build schema with proper field exclusion
+        # Include model field for compatibility but don't require it
         schema = WorkflowSchemaBuilder.build_schema(
             tool_specific_fields=consensus_field_overrides,
             model_field_schema=self.get_model_field_schema(),
-            auto_mode=self.is_effective_auto_mode(),
+            auto_mode=False,  # Consensus doesn't require model at MCP boundary
             tool_name=self.get_name(),
+            excluded_workflow_fields=excluded_workflow_fields,
+            excluded_common_fields=excluded_common_fields,
         )
-
-        # Remove unused workflow fields
-        if "properties" in schema:
-            for field in [
-                "files_checked",
-                "relevant_context",
-                "issues_found",
-                "hypothesis",
-                "backtrack_from_step",
-                "confidence",  # Not used in consensus workflow
-                "model",  # Consensus uses 'models' field instead
-                "temperature",  # Not used in consensus workflow
-                "thinking_mode",  # Not used in consensus workflow
-                "use_websearch",  # Not used in consensus workflow
-                "relevant_files",  # Not used in consensus workflow
-            ]:
-                schema["properties"].pop(field, None)
-
         return schema
 
     def get_required_actions(
@@ -324,7 +325,7 @@ of the evidence, even when it strongly points in one direction.""",
         Note: confidence parameter is kept for compatibility with base class but not used.
         """
         if step_number == 1:
-            # Claude's initial analysis
+            # CLI Agent's initial analysis
             return [
                 "You've provided your initial analysis. The tool will now consult other models.",
                 "Wait for the next step to receive the first model's response.",
@@ -355,6 +356,17 @@ of the evidence, even when it strongly points in one direction.""",
 
     def requires_expert_analysis(self) -> bool:
         """Consensus workflow handles its own model consultations."""
+        return False
+
+    def requires_model(self) -> bool:
+        """
+        Consensus tool doesn't require model resolution at the MCP boundary.
+
+        Uses it's own set of models
+
+        Returns:
+            bool: False
+        """
         return False
 
     # Hook method overrides for consensus-specific behavior
@@ -404,7 +416,7 @@ of the evidence, even when it strongly points in one direction.""",
         current_idx = request.current_model_index or 0
 
         if request.step_number == 1:
-            # After Claude's initial analysis, prepare to consult first model
+            # After CLI Agent's initial analysis, prepare to consult first model
             response_data["status"] = "consulting_models"
             response_data["next_model"] = self.models_to_consult[0] if self.models_to_consult else None
             response_data["next_steps"] = (
@@ -463,9 +475,9 @@ of the evidence, even when it strongly points in one direction.""",
                     "next_step_required": request.step_number < request.total_steps,
                 }
 
-                # Add Claude's analysis to step 1
+                # Add CLAI Agent's analysis to step 1
                 if request.step_number == 1:
-                    response_data["claude_analysis"] = {
+                    response_data["agent_analysis"] = {
                         "initial_analysis": request.step,
                         "findings": request.findings,
                     }
@@ -512,7 +524,7 @@ of the evidence, even when it strongly points in one direction.""",
                     "provider_used": provider.get_provider_type().value,
                 }
 
-                return [TextContent(type="text", text=json.dumps(response_data, indent=2))]
+                return [TextContent(type="text", text=json.dumps(response_data, indent=2, ensure_ascii=False))]
 
         # Otherwise, use standard workflow execution
         return await super().execute_workflow(arguments)
@@ -601,9 +613,7 @@ YOUR SUPPORTIVE ANALYSIS SHOULD:
 - Suggest optimizations that enhance value
 - Present realistic implementation pathways
 
-Remember: Being "for" means finding the BEST possible version of the idea IF it has merit, not blindly supporting bad """
-            "ideas."
-            "",
+Remember: Being "for" means finding the BEST possible version of the idea IF it has merit, not blindly supporting bad ideas.""",
             "against": """CRITICAL PERSPECTIVE WITH RESPONSIBILITY
 
 You are tasked with critiquing this proposal, but with ESSENTIAL BOUNDARIES:
@@ -627,9 +637,7 @@ YOUR CRITICAL ANALYSIS SHOULD:
 - Highlight potential negative consequences
 - Question assumptions that may be flawed
 
-Remember: Being "against" means rigorous scrutiny to ensure quality, not undermining good ideas that deserve """
-            "support."
-            "",
+Remember: Being "against" means rigorous scrutiny to ensure quality, not undermining good ideas that deserve support.""",
             "neutral": """BALANCED PERSPECTIVE
 
 Provide objective analysis considering both positive and negative aspects. However, if there is overwhelming evidence
@@ -674,7 +682,7 @@ of the evidence, even when it strongly points in one direction.""",
         """
         Customize metadata for consensus workflow to accurately reflect multi-model nature.
 
-        The default workflow metadata shows the model running Claude's analysis steps,
+        The default workflow metadata shows the model running Agent's analysis steps,
         but consensus is a multi-model tool that consults different models. We need
         to provide accurate metadata that reflects this.
         """
@@ -720,7 +728,7 @@ of the evidence, even when it strongly points in one direction.""",
                 }
             )
 
-            # Remove the misleading single model metadata that shows Claude's execution model
+            # Remove the misleading single model metadata that shows Agent's execution model
             # instead of the models being consulted
             metadata.pop("model_used", None)
             metadata.pop("provider_used", None)

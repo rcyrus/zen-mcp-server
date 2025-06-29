@@ -2,7 +2,7 @@
 Tracer Workflow tool - Step-by-step code tracing and dependency analysis
 
 This tool provides a structured workflow for comprehensive code tracing and analysis.
-It guides Claude through systematic investigation steps with forced pauses between each step
+It guides the CLI agent through systematic investigation steps with forced pauses between each step
 to ensure thorough code examination, dependency mapping, and execution flow analysis before proceeding.
 
 The tracer guides users through sequential code analysis with full context awareness and
@@ -86,8 +86,10 @@ TRACER_WORKFLOW_FIELD_DESCRIPTIONS = {
     "confidence": (
         "Indicate your current confidence in the tracing analysis completeness. Use: 'exploring' (starting analysis), "
         "'low' (early investigation), 'medium' (some patterns identified), 'high' (comprehensive understanding), "
-        "'complete' (tracing analysis finished and ready for output). Do NOT use 'complete' unless the tracing "
-        "analysis is thoroughly finished and you have a comprehensive understanding of the code relationships."
+        "'very_high' (very comprehensive understanding), 'almost_certain' (nearly complete tracing), "
+        "'certain' (100% confidence - tracing analysis is finished and ready for output with no need for external model validation). "
+        "Do NOT use 'certain' unless the tracing analysis is thoroughly finished and you have a comprehensive understanding "
+        "of the code relationships. Using 'certain' means you have complete confidence locally and prevents external model validation."
     ),
     "trace_mode": "Type of tracing: 'ask' (default - prompts user to choose mode), 'precision' (execution flow) or 'dependencies' (structural relationships)",
     "target_description": (
@@ -181,24 +183,24 @@ class TracerTool(WorkflowTool):
     def get_description(self) -> str:
         return (
             "STEP-BY-STEP CODE TRACING WORKFLOW - Systematic code analysis through guided investigation. "
-            "This tool guides you through a structured investigation process where you:\\n\\n"
-            "1. Start with step 1: describe your tracing plan and target\\n"
-            "2. STOP and investigate code structure, patterns, and relationships\\n"
-            "3. Report findings in step 2 with concrete evidence from actual code analysis\\n"
-            "4. Continue investigating between each step\\n"
-            "5. Track findings, relevant files, and code relationships throughout\\n"
-            "6. Build comprehensive understanding as analysis evolves\\n"
-            "7. Complete with detailed output formatted according to trace mode\\n\\n"
-            "IMPORTANT: This tool enforces investigation between steps:\\n"
-            "- After each call, you MUST investigate before calling again\\n"
-            "- Each step must include NEW evidence from code examination\\n"
-            "- No recursive calls without actual investigation work\\n"
-            "- The tool will specify which step number to use next\\n"
-            "- Follow the required_actions list for investigation guidance\\n\\n"
-            "TRACE MODES:\\n"
-            "- 'ask': Default mode - prompts you to choose between precision or dependencies modes with explanations\\n"
-            "- 'precision': For methods/functions - traces execution flow, call chains, and usage patterns\\n"
-            "- 'dependencies': For classes/modules - maps structural relationships and bidirectional dependencies\\n\\n"
+            "This tool guides you through a structured investigation process where you:\n\n"
+            "1. Start with step 1: describe your tracing plan and target\n"
+            "2. STOP and investigate code structure, patterns, and relationships\n"
+            "3. Report findings in step 2 with concrete evidence from actual code analysis\n"
+            "4. Continue investigating between each step\n"
+            "5. Track findings, relevant files, and code relationships throughout\n"
+            "6. Build comprehensive understanding as analysis evolves\n"
+            "7. Complete with detailed output formatted according to trace mode\n\n"
+            "IMPORTANT: This tool enforces investigation between steps:\n"
+            "- After each call, you MUST investigate before calling again\n"
+            "- Each step must include NEW evidence from code examination\n"
+            "- No recursive calls without actual investigation work\n"
+            "- The tool will specify which step number to use next\n"
+            "- Follow the required_actions list for investigation guidance\n\n"
+            "TRACE MODES:\n"
+            "- 'ask': Default mode - prompts you to choose between precision or dependencies modes with explanations\n"
+            "- 'precision': For methods/functions - traces execution flow, call chains, and usage patterns\n"
+            "- 'dependencies': For classes/modules - maps structural relationships and bidirectional dependencies\n\n"
             "Perfect for: method execution flow analysis, dependency mapping, call chain tracing, "
             "structural relationship analysis, architectural understanding, code comprehension."
         )
@@ -545,7 +547,7 @@ class TracerTool(WorkflowTool):
 
     def _get_rendering_instructions(self, trace_mode: str) -> str:
         """
-        Get mode-specific rendering instructions for Claude.
+        Get mode-specific rendering instructions for the CLI agent.
 
         Args:
             trace_mode: Either "precision" or "dependencies"

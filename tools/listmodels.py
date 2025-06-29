@@ -43,7 +43,15 @@ class ListModelsTool(BaseTool):
 
     def get_input_schema(self) -> dict[str, Any]:
         """Return the JSON schema for the tool's input"""
-        return {"type": "object", "properties": {}, "required": []}
+        return {
+            "type": "object",
+            "properties": {"model": {"type": "string", "description": "Model to use (ignored by listmodels tool)"}},
+            "required": [],
+        }
+
+    def get_annotations(self) -> Optional[dict[str, Any]]:
+        """Return tool annotations indicating this is a read-only tool"""
+        return {"readOnlyHint": True}
 
     def get_system_prompt(self) -> str:
         """No AI model needed for this tool"""
@@ -52,6 +60,9 @@ class ListModelsTool(BaseTool):
     def get_request_model(self):
         """Return the Pydantic model for request validation."""
         return ToolRequest
+
+    def requires_model(self) -> bool:
+        return False
 
     async def prepare_prompt(self, request: ToolRequest) -> str:
         """Not used for this utility tool"""
@@ -214,7 +225,7 @@ class ListModelsTool(BaseTool):
                 output_lines.append(f"**Error loading models**: {str(e)}")
         else:
             output_lines.append("**Status**: Not configured (set OPENROUTER_API_KEY)")
-            output_lines.append("**Note**: Provides access to GPT-4, Claude, Mistral, and many more")
+            output_lines.append("**Note**: Provides access to GPT-4, O3, Mistral, and many more")
 
         output_lines.append("")
 
@@ -285,7 +296,7 @@ class ListModelsTool(BaseTool):
         # Add usage tips
         output_lines.append("\n**Usage Tips**:")
         output_lines.append("- Use model aliases (e.g., 'flash', 'o3', 'opus') for convenience")
-        output_lines.append("- In auto mode, Claude will select the best model for each task")
+        output_lines.append("- In auto mode, the CLI Agent will select the best model for each task")
         output_lines.append("- Custom models are only available when CUSTOM_API_URL is set")
         output_lines.append("- OpenRouter provides access to many cloud models with one API key")
 
