@@ -74,6 +74,7 @@ from tools import (  # noqa: E402
     PlannerTool,
     PrecommitTool,
     RefactorTool,
+    ResearchTool,
     SecauditTool,
     TestGenTool,
     ThinkDeepTool,
@@ -275,6 +276,7 @@ TOOLS = {
     "refactor": RefactorTool(),  # Step-by-step refactoring analysis workflow with expert validation
     "tracer": TracerTool(),  # Static call path prediction and control flow analysis
     "testgen": TestGenTool(),  # Step-by-step test generation workflow with expert validation
+    "research": ResearchTool(),  # Fast web research using Perplexity Sonar for technical information
     "challenge": ChallengeTool(),  # Critical challenge prompt wrapper to avoid automatic agreement
     "listmodels": ListModelsTool(),  # List all available AI models by provider
     "version": VersionTool(),  # Display server version and system information
