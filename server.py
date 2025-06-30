@@ -163,7 +163,6 @@ except Exception as e:
 
 logger = logging.getLogger(__name__)
 
-
 # Create the MCP server instance with a unique name identifier
 # This name is used by MCP clients to identify and connect to this specific server
 server: Server = Server("zen-server")
@@ -390,6 +389,7 @@ def configure_providers():
     from providers.gemini import GeminiModelProvider
     from providers.openai_provider import OpenAIModelProvider
     from providers.openrouter import OpenRouterProvider
+    from providers.perplexity_provider import PerplexityProvider
     from providers.xai import XAIModelProvider
     from utils.model_restrictions import get_restriction_service
 
@@ -432,6 +432,13 @@ def configure_providers():
         has_native_apis = True
         logger.info("DIAL API key found - DIAL models available")
 
+    # Check for Perplexity API key
+    perplexity_key = os.getenv("PERPLEXITY_API_KEY")
+    if perplexity_key and perplexity_key != "your_perplexity_api_key_here":
+        valid_providers.append("Perplexity")
+        has_native_apis = True
+        logger.info("Perplexity API key found - Sonar models available")
+
     # Check for OpenRouter API key
     openrouter_key = os.getenv("OPENROUTER_API_KEY")
     logger.debug(f"OpenRouter key check: key={'[PRESENT]' if openrouter_key else '[MISSING]'}")
@@ -473,6 +480,8 @@ def configure_providers():
             ModelProviderRegistry.register_provider(ProviderType.XAI, XAIModelProvider)
         if dial_key and dial_key != "your_dial_api_key_here":
             ModelProviderRegistry.register_provider(ProviderType.DIAL, DIALModelProvider)
+        if perplexity_key and perplexity_key != "your_perplexity_api_key_here":
+            ModelProviderRegistry.register_provider(ProviderType.PERPLEXITY, PerplexityProvider)
 
     # 2. Custom provider second (for local/private models)
     if has_custom:
@@ -496,6 +505,7 @@ def configure_providers():
             "- OPENAI_API_KEY for OpenAI o3 model\n"
             "- XAI_API_KEY for X.AI GROK models\n"
             "- DIAL_API_KEY for DIAL models\n"
+            "- PERPLEXITY_API_KEY for Perplexity Sonar models\n"
             "- OPENROUTER_API_KEY for OpenRouter (multiple models)\n"
             "- CUSTOM_API_URL for local models (Ollama, vLLM, etc.)"
         )
@@ -589,27 +599,6 @@ async def handle_list_tools() -> list[Tool]:
         List of Tool objects representing all available tools
     """
     logger.debug("MCP client requested tool list")
-
-    # Try to log client info if available (this happens early in the handshake)
-    try:
-        from utils.client_info import format_client_info, get_client_info_from_context
-
-        client_info = get_client_info_from_context(server)
-        if client_info:
-            formatted = format_client_info(client_info)
-            logger.info(f"MCP Client Connected: {formatted}")
-
-            # Log to activity file as well
-            try:
-                mcp_activity_logger = logging.getLogger("mcp_activity")
-                friendly_name = client_info.get("friendly_name", "Claude")
-                raw_name = client_info.get("name", "Unknown")
-                version = client_info.get("version", "Unknown")
-                mcp_activity_logger.info(f"MCP_CLIENT_INFO: {friendly_name} (raw={raw_name} v{version})")
-            except Exception:
-                pass
-    except Exception as e:
-        logger.debug(f"Could not log client info during list_tools: {e}")
     tools = []
 
     # Add all registered AI-powered tools from the TOOLS registry
@@ -1305,9 +1294,6 @@ async def main():
     # Log startup message
     logger.info("Zen MCP Server starting up...")
     logger.info(f"Log level: {log_level}")
-
-    # Note: MCP client info will be logged during the protocol handshake
-    # (when handle_list_tools is called)
 
     # Log current model mode
     from config import IS_AUTO_MODE
