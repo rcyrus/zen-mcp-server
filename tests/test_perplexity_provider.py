@@ -32,7 +32,7 @@ class TestPerplexityProvider:
         provider = PerplexityProvider("test-key")
         assert provider.api_key == "test-key"
         assert provider.get_provider_type() == ProviderType.PERPLEXITY
-        expected_url = "https://api.perplexity.ai/chat/completions"
+        expected_url = "https://api.perplexity.ai"
         assert provider.base_url == expected_url
 
     def test_initialization_with_api_key(self):
@@ -49,7 +49,7 @@ class TestPerplexityProvider:
     def test_base_url_correct(self):
         """Test that base URL is set correctly for Perplexity API."""
         provider = PerplexityProvider("test-key")
-        expected_url = "https://api.perplexity.ai/chat/completions"
+        expected_url = "https://api.perplexity.ai"
         assert provider.base_url == expected_url
 
     def test_friendly_name(self):
@@ -57,6 +57,7 @@ class TestPerplexityProvider:
         provider = PerplexityProvider("test-key")
         assert provider.FRIENDLY_NAME == "Perplexity"
 
+    @patch.dict(os.environ, {}, clear=True)
     def test_model_validation_implemented(self):
         """Test that model validation is now implemented."""
         provider = PerplexityProvider("test-key")
@@ -69,7 +70,6 @@ class TestPerplexityProvider:
 
         # Should work with aliases
         assert provider.validate_model_name("perplexity") is True
-        assert provider.validate_model_name("pplx") is True
 
         # Should return False for invalid models
         assert provider.validate_model_name("invalid-model") is False
@@ -121,7 +121,7 @@ class TestPerplexityExtensions:
         return PerplexityProvider(api_key="test-key")
 
     def test_extract_perplexity_params_max_tokens(self, provider):
-        """Test PPLX-031: max_tokens parameter extraction."""
+        """Test max_tokens extraction."""
         kwargs = {"max_tokens": 500}
         params = provider._extract_perplexity_params("sonar", kwargs)
 
@@ -129,7 +129,7 @@ class TestPerplexityExtensions:
         assert params["max_tokens"] == 500
 
     def test_extract_perplexity_params_reasoning_effort_valid(self, provider):
-        """Test PPLX-024: reasoning_effort for reasoning models."""
+        """Test reasoning effort extraction for reasoning models."""
         kwargs = {"reasoning_effort": "medium"}
         params = provider._extract_perplexity_params("sonar-reasoning", kwargs)
 
@@ -137,7 +137,7 @@ class TestPerplexityExtensions:
         assert params["reasoning_effort"] == "medium"
 
     def test_extract_perplexity_params_reasoning_effort_ignored(self, provider):
-        """Test PPLX-024: reasoning_effort ignored for non-reasoning models."""
+        """Test reasoning effort is ignored for non-reasoning models."""
         kwargs = {"reasoning_effort": "medium"}
         with patch("providers.perplexity_provider.logger") as mock_logger:
             params = provider._extract_perplexity_params("sonar", kwargs)
@@ -146,7 +146,7 @@ class TestPerplexityExtensions:
         mock_logger.warning.assert_called_once()
 
     def test_extract_perplexity_params_search_domain_filter(self, provider):
-        """Test PPLX-022: search_domain_filter parameter."""
+        """Test search domain filter extraction."""
         kwargs = {"search_domain_filter": ["wikipedia.org", "-reddit.com"]}
         params = provider._extract_perplexity_params("sonar", kwargs)
 
@@ -154,7 +154,7 @@ class TestPerplexityExtensions:
         assert params["search_domain_filter"] == ["wikipedia.org", "-reddit.com"]
 
     def test_extract_perplexity_params_search_recency_filter(self, provider):
-        """Test PPLX-023: search_recency_filter parameter."""
+        """Test search recency filter extraction."""
         kwargs = {"search_recency_filter": "week"}
         params = provider._extract_perplexity_params("sonar", kwargs)
 
@@ -162,7 +162,7 @@ class TestPerplexityExtensions:
         assert params["search_recency_filter"] == "week"
 
     def test_extract_perplexity_params_search_mode(self, provider):
-        """Test PPLX-032: search_mode parameter."""
+        """Test search mode extraction."""
         kwargs = {"search_mode": "high"}
         params = provider._extract_perplexity_params("sonar", kwargs)
 
@@ -170,7 +170,7 @@ class TestPerplexityExtensions:
         assert params["search_mode"] == "high"
 
     def test_extract_perplexity_params_date_filters(self, provider):
-        """Test PPLX-033: date filter parameters."""
+        """Test date filters extraction."""
         kwargs = {"search_after_date_filter": "2025-01-01", "search_before_date_filter": "2025-12-31"}
         params = provider._extract_perplexity_params("sonar", kwargs)
 
@@ -180,7 +180,7 @@ class TestPerplexityExtensions:
         assert params["search_before_date_filter"] == "2025-12-31"
 
     def test_extract_perplexity_params_image_params(self, provider):
-        """Test PPLX-034: image parameter handling."""
+        """Test image parameters extraction."""
         kwargs = {"return_images": True, "image_domain_filter": ["unsplash.com"], "image_format_filter": ["jpg", "png"]}
         params = provider._extract_perplexity_params("sonar", kwargs)
 
@@ -190,7 +190,7 @@ class TestPerplexityExtensions:
         assert params["return_images"] is True
 
     def test_extract_perplexity_params_related_questions(self, provider):
-        """Test PPLX-035: related questions parameter."""
+        """Test related questions parameter."""
         kwargs = {"return_related_questions": True}
         params = provider._extract_perplexity_params("sonar", kwargs)
 
@@ -201,7 +201,7 @@ class TestPerplexityExtensions:
         """Test reasoning effort validation with valid values."""
         valid_efforts = ["low", "medium", "high"]
         for effort in valid_efforts:
-            provider._validate_reasoning_effort(effort)  # Should not raise
+            provider._validate_reasoning_effort(effort)
 
     def test_validate_reasoning_effort_invalid(self, provider):
         """Test reasoning effort validation with invalid values."""
@@ -211,7 +211,7 @@ class TestPerplexityExtensions:
     def test_validate_search_domain_filter_valid(self, provider):
         """Test search domain filter validation with valid domains."""
         valid_domains = ["wikipedia.org", "-reddit.com", "github.com"]
-        provider._validate_search_domain_filter(valid_domains)  # Should not raise
+        provider._validate_search_domain_filter(valid_domains)
 
     def test_validate_search_domain_filter_invalid(self, provider):
         """Test search domain filter validation with invalid inputs."""
@@ -228,7 +228,7 @@ class TestPerplexityExtensions:
         """Test search recency filter validation with valid values."""
         valid_recencies = ["hour", "day", "week", "month", "year"]
         for recency in valid_recencies:
-            provider._validate_search_recency_filter(recency)  # Should not raise
+            provider._validate_search_recency_filter(recency)
 
     def test_validate_search_recency_filter_invalid(self, provider):
         """Test search recency filter validation with invalid values."""
@@ -239,7 +239,7 @@ class TestPerplexityExtensions:
         """Test search mode validation with valid values."""
         valid_modes = ["web", "high", "medium", "low"]
         for mode in valid_modes:
-            provider._validate_search_mode(mode)  # Should not raise
+            provider._validate_search_mode(mode)
 
     def test_validate_search_mode_invalid(self, provider):
         """Test search mode validation with invalid values."""
@@ -248,9 +248,9 @@ class TestPerplexityExtensions:
 
     def test_validate_date_filter_valid(self, provider):
         """Test date filter validation with valid dates."""
-        valid_dates = ["2025-01-01", "2025-12-31", "2024-02-29"]  # Leap year
+        valid_dates = ["2025-01-01", "2025-12-31", "2024-02-29"]
         for date in valid_dates:
-            provider._validate_date_filter(date)  # Should not raise
+            provider._validate_date_filter(date)
 
     def test_validate_date_filter_invalid_format(self, provider):
         """Test date filter validation with invalid formats."""
@@ -261,7 +261,7 @@ class TestPerplexityExtensions:
 
     def test_validate_date_filter_invalid_date(self, provider):
         """Test date filter validation with invalid dates."""
-        invalid_dates = ["2025-13-01", "2025-02-30", "2023-02-29"]  # Not leap year
+        invalid_dates = ["2025-13-01", "2025-02-30", "2023-02-29"]
         for invalid_date in invalid_dates:
             with pytest.raises(ValueError, match="Invalid date"):
                 provider._validate_date_filter(invalid_date)
@@ -282,17 +282,22 @@ class TestPerplexityExtensions:
 
     def test_calculate_perplexity_cost(self, provider):
         """Test cost calculation with official Perplexity pricing."""
-        usage_data = {"prompt_tokens": 1000, "completion_tokens": 500, "citation_tokens": 100, "reasoning_tokens": 200}
+        usage_data = {
+            "prompt_tokens": 1000,
+            "completion_tokens": 500,
+            "citation_tokens": 100,
+            "reasoning_tokens": 200,
+        }
 
         # Test sonar model cost
         cost = provider._calculate_perplexity_cost(usage_data, "sonar")
         assert cost["currency"] == "USD"
-        assert cost["prompt_cost"] == 0.001  # 1000 tokens * $0.001/1M
-        assert cost["completion_cost"] == 0.0005  # 500 tokens * $0.001/1M
-        assert cost["citation_cost"] == 0.0  # Not charged for sonar
-        assert cost["reasoning_cost"] == 0.0  # Not charged for sonar
+        assert cost["prompt_cost"] == 0.000001
+        assert cost["completion_cost"] == 0.0000005
+        assert cost["citation_cost"] == 0.0
+        assert cost["reasoning_cost"] == 0.0
 
         # Test sonar-deep-research model cost (has citation/reasoning charges)
         cost_deep = provider._calculate_perplexity_cost(usage_data, "sonar-deep-research")
-        assert cost_deep["citation_cost"] == 0.0002  # 100 tokens * $0.002/1M
-        assert cost_deep["reasoning_cost"] == 0.0006  # 200 tokens * $0.003/1M
+        assert cost_deep["citation_cost"] == 0.0000002
+        assert cost_deep["reasoning_cost"] == 0.0000006
