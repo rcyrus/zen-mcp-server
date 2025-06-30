@@ -3,6 +3,8 @@
 import logging
 from typing import Optional
 
+from utils.model_restrictions import get_restriction_service
+
 from .base import (
     ModelCapabilities,
     ModelResponse,
@@ -16,11 +18,6 @@ logger = logging.getLogger(__name__)
 
 class PerplexityProvider(OpenAICompatibleProvider):
     """Provider for Perplexity AI Sonar models.
-
-    Support            if search_results:
-                metadata['search_results'] = search_results
-                # Alternative name for zen tools
-                metadata['sources'] = search_results
     - sonar: Fast search-augmented model
     - sonar-pro: High-quality search-augmented model
     - sonar-reasoning: Reasoning with search
@@ -162,9 +159,6 @@ class PerplexityProvider(OpenAICompatibleProvider):
         if resolved_name not in self.SUPPORTED_MODELS:
             raise ValueError(f"Unsupported model: {model_name}")
 
-        # Apply restrictions if needed
-        from utils.model_restrictions import get_restriction_service
-
         restriction_service = get_restriction_service()
         if not restriction_service.is_allowed(ProviderType.PERPLEXITY, resolved_name, model_name):
             raise ValueError(f"Model '{model_name}' is not allowed.")
@@ -235,11 +229,14 @@ class PerplexityProvider(OpenAICompatibleProvider):
         if max_output_tokens is None and "max_tokens" in perplexity_params:
             max_output_tokens = perplexity_params["max_tokens"]
 
-        # IMPORTANT: Resolve aliases before API call
+        # Resolve aliases before API call
         resolved_model_name = self._resolve_model_name(model_name)
 
-        # Call parent implementation with enhanced parameters
-        return super().generate_content(
+        if max_output_tokens is None and "max_tokens" in perplexity_params:
+            max_output_tokens = perplexity_params.pop("max_tokens")
+
+        # Call parent's generate_content method
+        model_response = super().generate_content(
             prompt=prompt,
             model_name=resolved_model_name,
             system_prompt=system_prompt,
@@ -247,6 +244,15 @@ class PerplexityProvider(OpenAICompatibleProvider):
             max_output_tokens=max_output_tokens,
             images=images,
             **cleaned_kwargs,
+        )
+
+        # Enhance with Perplexity-specific metadata if available
+        raw_response = None
+        if hasattr(model_response, "metadata") and isinstance(model_response.metadata, dict):
+            raw_response = model_response.metadata.get("raw_response")
+        return self._enhance_model_response_with_perplexity_metadata(
+            response=raw_response,
+            model_response=model_response,
         )
 
     def _extract_perplexity_params(self, model_name: str, kwargs: dict) -> dict:
