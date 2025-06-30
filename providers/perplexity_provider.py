@@ -1,6 +1,7 @@
 """Perplexity AI model provider for Sonar models."""
 
 import logging
+import re
 from typing import Optional
 
 from utils.model_restrictions import get_restriction_service
@@ -174,8 +175,6 @@ class PerplexityProvider(OpenAICompatibleProvider):
             return False
 
         # Then check if model is allowed by restrictions
-        from utils.model_restrictions import get_restriction_service
-
         restriction_service = get_restriction_service()
         if not restriction_service.is_allowed(ProviderType.PERPLEXITY, resolved_name, model_name):
             return False
@@ -227,13 +226,10 @@ class PerplexityProvider(OpenAICompatibleProvider):
 
         # Handle max_tokens parameter specifically
         if max_output_tokens is None and "max_tokens" in perplexity_params:
-            max_output_tokens = perplexity_params["max_tokens"]
+            max_output_tokens = perplexity_params.pop("max_tokens")
 
         # Resolve aliases before API call
         resolved_model_name = self._resolve_model_name(model_name)
-
-        if max_output_tokens is None and "max_tokens" in perplexity_params:
-            max_output_tokens = perplexity_params.pop("max_tokens")
 
         # Call parent's generate_content method
         model_response = super().generate_content(
@@ -256,7 +252,16 @@ class PerplexityProvider(OpenAICompatibleProvider):
         )
 
     def _extract_perplexity_params(self, model_name: str, kwargs: dict) -> dict:
-        """Extract and validate Perplexity-specific parameters."""
+        """Extract and validate Perplexity-specific parameters.
+
+        Args:
+            model_name: Name of the model being used
+            kwargs: Keyword arguments containing potential Perplexity
+                parameters
+
+        Returns:
+            dict: Validated Perplexity-specific parameters
+        """
         params = {}
 
         # max_tokens support
@@ -269,7 +274,10 @@ class PerplexityProvider(OpenAICompatibleProvider):
                 self._validate_reasoning_effort(kwargs["reasoning_effort"])
                 params["reasoning_effort"] = kwargs["reasoning_effort"]
             else:
-                logger.warning(f"reasoning_effort ignored for non-reasoning model: " f"{model_name}")
+                logger.warning(
+                    "reasoning_effort ignored for non-reasoning model: %s",
+                    model_name,
+                )
 
         # search_domain_filter support
         if "search_domain_filter" in kwargs:
@@ -338,7 +346,7 @@ class PerplexityProvider(OpenAICompatibleProvider):
         """Validate search_recency_filter parameter."""
         valid_recencies = ["hour", "day", "week", "month", "year"]
         if recency not in valid_recencies:
-            raise ValueError(f"search_recency_filter must be one of {valid_recencies}, " f"got: {recency}")
+            raise ValueError("search_recency_filter must be one of " f"{valid_recencies}, got: {recency}")
 
     def _validate_search_mode(self, mode: str) -> None:
         """Validate search_mode parameter."""
@@ -348,8 +356,6 @@ class PerplexityProvider(OpenAICompatibleProvider):
 
     def _validate_date_filter(self, date_str: str) -> None:
         """Validate date filter format (YYYY-MM-DD)."""
-        import re
-
         date_pattern = r"^\d{4}-\d{2}-\d{2}$"
         if not re.match(date_pattern, date_str):
             raise ValueError(f"Date filter must be in YYYY-MM-DD format, got: {date_str}")
@@ -381,16 +387,35 @@ class PerplexityProvider(OpenAICompatibleProvider):
     ) -> ModelResponse:
         """Enhance ModelResponse with Perplexity-specific metadata.
 
-        - Extract response ID for conversation continuity
-        - Parse usage tokens (prompt, completion, total, citation, reasoning)
-        - Extract citations and search_results
-        - Parse num_search_queries for metrics
+        This method extracts and integrates Perplexity-specific metadata
+        including:
+        - Response ID for conversation continuity
+        - Usage tokens breakdown (prompt, completion, citation, reasoning)
+        - Citations and search results
+        - Search queries count for metrics
+
+        Args:
+            response: Raw response object from Perplexity API (can be None)
+            model_response: The ModelResponse object to enhance
+
+        Returns:
+            ModelResponse: Enhanced response with Perplexity metadata
+                integrated
         """
         # Extract Perplexity-specific metadata
-        perplexity_metadata = self._extract_perplexity_metadata(response)
+        # If no response provided, try to get it from model_response metadata
+        actual_response = response
+        if actual_response is None:
+            if hasattr(model_response, "metadata") and isinstance(model_response.metadata, dict):
+                actual_response = model_response.metadata.get("raw_response")
 
-        # Merge with existing metadata
-        enhanced_metadata = {**model_response.metadata, **perplexity_metadata}
+        perplexity_metadata = self._extract_perplexity_metadata(actual_response)
+
+        # Safely merge with existing metadata
+        existing_metadata = {}
+        if hasattr(model_response, "metadata") and isinstance(model_response.metadata, dict):
+            existing_metadata = model_response.metadata
+        enhanced_metadata = {**existing_metadata, **perplexity_metadata}
 
         # Create enhanced ModelResponse
         return ModelResponse(
@@ -501,7 +526,12 @@ class PerplexityProvider(OpenAICompatibleProvider):
             "sonar-pro": {"input": 0.003, "output": 0.015},
             "sonar-reasoning": {"input": 0.001, "output": 0.005},
             "sonar-reasoning-pro": {"input": 0.002, "output": 0.008},
-            "sonar-deep-research": {"input": 0.002, "output": 0.008, "citation": 0.002, "reasoning": 0.003},
+            "sonar-deep-research": {
+                "input": 0.002,
+                "output": 0.008,
+                "citation": 0.002,
+                "reasoning": 0.003,
+            },
             "r1-1776": {"input": 0.002, "output": 0.008},
         }
         resolved_name = self._resolve_model_name(model_name)
@@ -527,3 +557,33 @@ class PerplexityProvider(OpenAICompatibleProvider):
             "currency": "USD",
         }
         return cost_breakdown
+
+    def _safe_get_from_kwargs(self, kwargs: dict, key: str, default=None):
+        """Safely get a value from kwargs with proper error handling.
+
+        Args:
+            kwargs: Keyword arguments dictionary
+            key: Key to retrieve
+            default: Default value if key not found
+
+        Returns:
+            Value from kwargs or default
+        """
+        return kwargs.get(key, default)
+
+    def _validate_perplexity_param(self, param_name: str, value, validator_func):
+        """Validate a single Perplexity parameter using provided validator.
+
+        Args:
+            param_name: Name of the parameter for error messages
+            value: Value to validate
+            validator_func: Function to validate the value
+
+        Raises:
+            ValueError: If validation fails
+        """
+        try:
+            validator_func(value)
+        except ValueError as e:
+            logger.error(f"Invalid {param_name}: {e}")
+            raise
