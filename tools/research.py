@@ -351,6 +351,8 @@ Query to research: {query}"""
         for citation in citations_found:
             # Extract URL from citation to check for duplicates
             if citation.startswith("["):
+                import re
+
                 url_match = re.search(r"\]\((https?://[^)]+)\)", citation)
                 url = url_match.group(1) if url_match else citation
             else:
@@ -400,7 +402,10 @@ Query to research: {query}"""
             if "search_efficiency" in metadata:
                 efficiency = metadata["search_efficiency"]
                 queries_count = metadata.get("search_queries_count", "unknown")
-                formatted_response += f"\n\n---\n*Search efficiency: {efficiency:.2f} | Queries used: {queries_count}*"
+                formatted_response += (
+                    f"\n\n---\n*Search efficiency: {efficiency:.2f} | "
+                    f"Queries used: {queries_count}*"
+                )
 
         return formatted_response
 
