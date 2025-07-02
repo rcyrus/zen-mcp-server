@@ -384,7 +384,10 @@ Query to research: {query}"""
                 )
 
             # Add clean citations section
-            formatted_response += "\n\n## Sources\n"
+            # Use "Citations" for fallback metadata, otherwise "Sources"
+            is_citations_fallback = model_info and "metadata" in model_info and "citations" in model_info["metadata"]
+            header = "## Citations" if is_citations_fallback else "## Sources"
+            formatted_response += f"\n\n{header}\n"
             for i, citation in enumerate(unique_citations, 1):
                 formatted_response += f"\n{i}. {citation}"
 
@@ -394,7 +397,7 @@ Query to research: {query}"""
             if "related_questions" in metadata:
                 related_questions = metadata["related_questions"]
                 if related_questions:
-                    formatted_response += "\n\n## Questions Connexes\n"
+                    formatted_response += "\n\n## Related Questions\n"
                     for question in related_questions:
                         formatted_response += f"\n- {question}"
 
@@ -403,8 +406,7 @@ Query to research: {query}"""
                 efficiency = metadata["search_efficiency"]
                 queries_count = metadata.get("search_queries_count", "unknown")
                 formatted_response += (
-                    f"\n\n---\n*Search efficiency: {efficiency:.2f} | "
-                    f"Queries used: {queries_count}*"
+                    f"\n\n---\n*Search efficiency: {efficiency:.2f} | " f"Queries used: {queries_count}*"
                 )
 
         return formatted_response
