@@ -8,10 +8,14 @@ information retrieval.
 """
 
 import logging
+import os
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
+import config
 from tools.shared.base_models import ToolRequest
 from tools.simple.base import SimpleTool
 
@@ -44,7 +48,7 @@ class ResearchRequest(ToolRequest):
     )
 
     search_mode: Optional[str] = Field(
-        default="medium",
+        default_factory=lambda: config.RESEARCH_DEFAULT_SEARCH_MODE,
         description=("Search quality vs speed trade-off: 'web', 'high', 'medium', 'low'"),
     )
 
@@ -54,7 +58,7 @@ class ResearchRequest(ToolRequest):
     )
 
     max_tokens: Optional[int] = Field(
-        default=2048,
+        default_factory=lambda: config.RESEARCH_DEFAULT_MAX_TOKENS,
         ge=100,
         le=4096,
         description=("Maximum tokens for response. Higher values allow more comprehensive results"),
@@ -131,7 +135,7 @@ class ResearchTool(SimpleTool):
 
     def get_description(self) -> str:
         """Return the tool description."""
-        return "Fast web research using Perplexity Sonar for technical information and current developments"
+        return "Fast web research using Perplexity Sonar for technical information " "and current developments"
 
     def get_request_model(self):
         """Return the request model class."""
@@ -147,20 +151,21 @@ class ResearchTool(SimpleTool):
         return {
             "query": {
                 "type": "string",
-                "description": ("Search query or question for web research. Be specific for better results."),
+                "description": ("Search query or question for web research. " "Be specific for better results."),
             },
             "domain_filter": {
                 "type": "array",
                 "items": {"type": "string"},
                 "description": (
-                    "Domains to focus search on (e.g., ['stackoverflow.com', 'github.com']). Use '-' prefix to exclude."
+                    "Domains to focus search on (e.g., ['stackoverflow.com', "
+                    "'github.com']). Use '-' prefix to exclude."
                 ),
                 "default": [],
             },
             "recency_filter": {
                 "type": "string",
                 "enum": ["hour", "day", "week", "month", "year"],
-                "description": ("How recent the information should be. Default: no filter (all time)"),
+                "description": ("How recent the information should be. Default: " "no filter (all time)"),
             },
             "search_mode": {
                 "type": "string",
@@ -172,19 +177,16 @@ class ResearchTool(SimpleTool):
                     "'medium' balanced, "
                     "'low' for fast"
                 ),
-                "default": "medium",
             },
             "return_related_questions": {
                 "type": "boolean",
                 "description": ("Include suggested related questions for further research"),
-                "default": True,
             },
             "max_tokens": {
                 "type": "integer",
                 "minimum": 100,
                 "maximum": 4096,
-                "description": ("Maximum tokens for response. Higher values allow more comprehensive results"),
-                "default": 2048,
+                "description": ("Maximum tokens for response. Higher values allow more " "comprehensive results"),
             },
         }
 
@@ -194,7 +196,7 @@ class ResearchTool(SimpleTool):
 
     def get_default_model(self) -> str:
         """Return the default model for this tool."""
-        return "sonar-pro"
+        return config.RESEARCH_DEFAULT_MODEL
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for research tasks."""
@@ -238,32 +240,19 @@ Query to research: {query}"""
         Returns:
             Dictionary of Perplexity API parameters
         """
-        params = {}
-        # Domain filtering
-        if hasattr(request, "domain_filter") and request.domain_filter:
+        params = {
+            "search_mode": request.search_mode,
+            "return_related_questions": request.return_related_questions,
+            "max_tokens": request.max_tokens,
+        }
+
+        # Domain filtering (optional)
+        if request.domain_filter:
             params["search_domain_filter"] = request.domain_filter
 
-        # Recency filtering
-        if hasattr(request, "recency_filter") and request.recency_filter:
+        # Recency filtering (optional)
+        if request.recency_filter:
             params["search_recency_filter"] = request.recency_filter
-
-        # Search mode
-        if hasattr(request, "search_mode") and request.search_mode:
-            params["search_mode"] = request.search_mode
-        else:
-            params["search_mode"] = "medium"  # Default balanced mode
-
-        # Related questions
-        if hasattr(request, "return_related_questions"):
-            params["return_related_questions"] = request.return_related_questions
-        else:
-            params["return_related_questions"] = True  # Default enabled
-
-        # Max tokens
-        if hasattr(request, "max_tokens") and request.max_tokens:
-            params["max_tokens"] = request.max_tokens
-        else:
-            params["max_tokens"] = 2048  # Default
 
         return params
 
@@ -409,7 +398,58 @@ Query to research: {query}"""
                     f"\n\n---\n*Search efficiency: {efficiency:.2f} | " f"Queries used: {queries_count}*"
                 )
 
+        # Export to markdown file if enabled (for tests)
+        if config.RESEARCH_EXPORT_TO_MD and not os.environ.get("RESEARCH_DISABLE_EXPORT", "false").lower() == "true":
+            try:
+                export_status = self._export_to_markdown(formatted_response, request)
+                formatted_response += f"\n\n---\n*{export_status}*"
+            except Exception as e:
+                formatted_response += f"\n\n---\n*Export failed: {str(e)}*"
+
         return formatted_response
+
+    def _export_to_markdown(self, content: str, request) -> str:
+        """
+        Export research results to a markdown file.
+
+        Args:
+            content: The formatted research content
+            request: The original research request
+
+        Returns:
+            Status message about the export
+        """
+        # Create export directory if it doesn't exist
+        export_dir = Path(config.RESEARCH_EXPORT_DIR)
+        export_dir.mkdir(exist_ok=True)
+
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        # Clean query for filename (remove special characters)
+        clean_query = "".join(c for c in request.query[:50] if c.isalnum() or c in (" ", "-", "_")).strip()
+        clean_query = clean_query.replace(" ", "_")
+        filename = f"research_{timestamp}_{clean_query}.md"
+
+        # Create full file path
+        file_path = export_dir / filename
+
+        # Prepare markdown content with metadata header
+        markdown_content = f"""# Research Report: {request.query}
+
+**Generated:** {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+**Search Mode:** {request.search_mode}
+**Max Tokens:** {request.max_tokens}
+
+---
+
+{content}
+"""
+
+        # Write to file
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(markdown_content)
+
+        return f"Research report saved to {file_path}"
 
     async def execute(self, arguments: dict[str, Any]) -> list:
         """

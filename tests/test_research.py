@@ -1,11 +1,14 @@
 """Tests for Research tool functionality."""
 
+import os
 from unittest.mock import patch
 
 import pytest
 
 from tools.research import ResearchRequest, ResearchTool
 from tools.shared.base_models import ToolRequest
+
+os.environ["RESEARCH_DISABLE_EXPORT"] = "true"
 
 
 class TestResearchTool:

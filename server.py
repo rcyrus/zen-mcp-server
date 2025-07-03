@@ -350,6 +350,11 @@ PROMPT_TEMPLATES = {
         "description": "Generate comprehensive tests",
         "template": "Generate comprehensive tests with {model}",
     },
+    "research": {
+        "name": "research",
+        "description": "Conduct in-depth research on a specific topic",
+        "template": "Conduct in-depth research on {topic} with {model}. User request: {user_query}. Provide a direct answer, key details, practical examples, and cite your sources.",
+    },
     "challenge": {
         "name": "challenge",
         "description": "Challenge a statement critically without automatic agreement",
@@ -611,8 +616,8 @@ async def handle_list_tools() -> list[Tool]:
 
         tools.append(
             Tool(
-                name=tool.name,
-                description=tool.description,
+                name=tool.get_name(),
+                description=tool.get_description(),
                 inputSchema=tool.get_input_schema(),
                 annotations=tool_annotations,
             )
