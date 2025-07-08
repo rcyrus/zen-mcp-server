@@ -23,8 +23,9 @@ from .simple.base import SimpleTool
 # Field descriptions for the Challenge tool
 CHALLENGE_FIELD_DESCRIPTIONS = {
     "prompt": (
-        "The statement, question, or assertion the user wants to challenge critically. "
-        "This may be a claim, suggestion, or idea that requires thoughtful reconsideration, not automatic agreement."
+        "The user's message or statement to analyze critically. "
+        "When manually invoked with 'challenge', exclude that prefix - just pass the actual content. "
+        "For automatic invocations (see tool description for conditions), pass the user's complete message unchanged."
     ),
 }
 
@@ -53,11 +54,34 @@ class ChallengeTool(SimpleTool):
 
     def get_description(self) -> str:
         return (
-            "CRITICAL CHALLENGE PROMPT – Use this to frame your statement in a way that prompts "
-            "the CLI agent to challenge it thoughtfully instead of agreeing by default. Ideal for "
-            "challenging assumptions, validating ideas, and seeking honest, analytical feedback as part of an ongoing "
-            "task. The tool wraps your input with instructions explicitly telling the agent to think critically "
-            "and disagree if warranted."
+            "This tool helps prevent reflexive agreement when users challenge your responses. "
+            "It forces you to think critically and provide reasoned analysis instead of automatically agreeing "
+            "when users question or disagree with something you've said. "
+            "Use this tool to ensure thoughtful evaluation rather than compliance. "
+            "\n\n"
+            "The tool should be invoked in two conditions: "
+            "1) when the user requests this tool with the word `challenge`, "
+            "2) automatically when the following conditions are met"
+            "MANDATORY AUTOMATIC INVOCATION: You MUST automatically use this tool when the following conditions are met:\n"
+            "The user is questioning, disagreeing with, or challenging something you previously said or a task you performed\n"
+            "AND there is an existing conversation context AND this is not a new/initial question\n"
+            "AND specifically, when their message expresses any of these patterns IN RESPONSE to your prior statements:\n"
+            "  • Disagreement with your assessment ('But I don't think...', 'I disagree...')\n"
+            "  • Challenging your assumptions or countering your proposal ('But ...', 'You're assuming...')\n"
+            "  • Questioning your evaluation ('But isn't it actually...', 'But consider...')\n"
+            "  • Confusion about your reasoning ('I'm confused why...', 'I don't understand...')\n"
+            "  • Belief you made an error ('That doesn't seem right...', 'Are you sure...')\n"
+            "  • Seeking justification ('Why did you...', 'Shouldn't we...')\n"
+            "  • Surprise at your conclusion ('But I thought...', 'Wait, why...')\n\n"
+            "Common patterns include messages starting with: 'But ...', 'Why did you...', 'I thought...', "
+            "'Shouldn't we...', 'That seems wrong...', 'Are you sure...', 'I'm confused...', etc.\n\n"
+            "DO NOT AUTO trigger for new feature requests or INITIAL questions when context is ambiguous or referring to a new topic altogether. "
+            "This tool helps with seeking truth through critical analysis. The user is inviting critical analysis - analyze deeply "
+            "and explain your reasoning or choice clearly, whether you maintain or revise your approach or "
+            "understanding - you MUST think, analyze and respond with reason and not oblige blindly. Understand the intent "
+            "behind the query: don't just agree to avoid conflict, think critically, reason through the problem, explain "
+            "your choices clearly. If the user is wrong, explain why. If you were wrong, acknowledge it and correct course. "
+            "Truth and correctness matter more than agreement."
         )
 
     def get_system_prompt(self) -> str:
@@ -133,8 +157,9 @@ class ChallengeTool(SimpleTool):
                 "challenge_prompt": wrapped_prompt,
                 "instructions": (
                     "Present the challenge_prompt to yourself and follow its instructions. "
-                    "Challenge the statement critically before forming your response. "
-                    "If you disagree after careful reconsideration, explain why."
+                    "Reassess the statement carefully and critically before responding. "
+                    "If, after reflection, you find reasons to disagree or qualify it, explain your reasoning. "
+                    "Likewise, if you find reasons to agree, articulate them clearly and justify your agreement."
                 ),
             }
 
@@ -165,11 +190,12 @@ class ChallengeTool(SimpleTool):
             The statement wrapped in challenge instructions
         """
         return (
-            f"CHALLENGE THIS STATEMENT - Do not automatically agree:\n\n"
+            f"CRITICAL REASSESSMENT – Do not automatically agree:\n\n"
             f'"{prompt}"\n\n'
-            f"Is this actually correct? Check carefully. If it's wrong, incomplete, misleading or incorrect, "
-            f"you must say so. Provide your honest assessment, not automatic agreement. If you "
-            f"feel there is merit in what the user is saying, explain WHY you agree."
+            f"Carefully evaluate the statement above. Is it accurate, complete, and well-reasoned? "
+            f"Investigate if needed before replying, and stay focused. If you identify flaws, gaps, or misleading "
+            f"points, explain them clearly. Likewise, if you find the reasoning sound, explain why it holds up. "
+            f"Respond with thoughtful analysis—stay to the point and avoid reflexive agreement."
         )
 
     # Required method implementations from SimpleTool
