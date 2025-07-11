@@ -3,6 +3,8 @@ google-genai>=1.19.0
 openai>=1.55.2  # Minimum version for httpx 0.28.0 compatibility
 pydantic>=2.0.0
 python-dotenv>=1.0.0
+fastapi>=0.104.0
+uvicorn>=0.24.0
 
 # Development dependencies (install with pip install -r requirements-dev.txt)
 # pytest>=7.4.0
