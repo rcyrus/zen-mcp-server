@@ -150,11 +150,8 @@ class HTTPTransport:
             
             session = self.sessions[session_id]
             
-            # Parse query parameters for enhanced features
+            # Parse query parameters - only preserve chunk_size for debugging/optimization
             query_params = dict(request.query_params)
-            view_mode = query_params.get("view", "compact")  # compact or full
-            
-            # Parse chunk size parameter for response optimization
             chunk_size_kb = DEFAULT_CHUNK_SIZE_KB
             if "chunk_size" in query_params:
                 try:
@@ -172,12 +169,11 @@ class HTTPTransport:
                 raise HTTPException(status_code=400, detail="Invalid JSON")
             
             # Create streaming response with compression support
-            response_generator = self._handle_mcp_message(session_id, session, body, query_params, chunk_size_kb)
+            response_generator = self._handle_mcp_message(session_id, session, body, chunk_size_kb)
             headers = {
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "Mcp-Session-Id": session_id,
-                "Vary": "view, chunk_size"  # Cache varies on view and chunk_size parameters
             }
             
             return StreamingResponse(
@@ -191,7 +187,7 @@ class HTTPTransport:
             """Health check endpoint."""
             return {"status": "ok", "server": "zen-mcp-http"}
     
-    async def _handle_mcp_message(self, session_id: str, session: Dict[str, Any], message: Dict[str, Any], query_params: Dict[str, str] = None, chunk_size_kb: int = DEFAULT_CHUNK_SIZE_KB):
+    async def _handle_mcp_message(self, session_id: str, session: Dict[str, Any], message: Dict[str, Any], chunk_size_kb: int = DEFAULT_CHUNK_SIZE_KB):
         """Handle individual MCP messages and yield SSE responses."""
         method = message.get("method")
         message_id = message.get("id")
@@ -215,74 +211,31 @@ class HTTPTransport:
             elif method == "tools/list":
                 tools = await handle_list_tools()
                 
-                # Parse query parameters
-                query_params = query_params or {}
-                view_mode = query_params.get("view", "compact")
-                logger.debug(f"[MCP HTTP] Query params: {query_params}, view_mode: {view_mode}")
+                # Build full tool schemas with complete functionality
+                tool_list = []
+                for tool in tools:
+                    tool_list.append({
+                        "name": tool.name,
+                        "description": tool.description,
+                        "inputSchema": tool.inputSchema
+                    })
                 
-                # Handle tool pagination and filtering
-                tool_ids = query_params.get("ids")
-                if tool_ids:
-                    # Selective tool loading: ?ids=chat,thinkdeep,debug
-                    requested_ids = [id.strip() for id in tool_ids.split(",")]
-                    tools = [tool for tool in tools if tool.name in requested_ids]
-                else:
-                    # Pagination: ?page=1&limit=10
-                    try:
-                        page = int(query_params.get("page", "1"))
-                        limit = min(int(query_params.get("limit", "50")), 1000)  # Cap at 1000
-                        start_idx = (page - 1) * limit
-                        end_idx = start_idx + limit
-                        tools = tools[start_idx:end_idx]
-                    except (ValueError, TypeError):
-                        # Invalid pagination params, use all tools
-                        pass
+                logger.info(f"[MCP HTTP] Returning {len(tool_list)} tools with full schemas")
                 
-                if view_mode == "full":
-                    # Return original complex schemas for power users
-                    tool_list = []
-                    for tool in tools:
-                        tool_list.append({
-                            "name": tool.name,
-                            "description": tool.description,
-                            "inputSchema": tool.inputSchema
-                        })
-                    logger.info(f"[MCP HTTP] Returning {len(tool_list)} tools with full schemas")
-                else:
-                    # Return simplified schemas for mobile compatibility
-                    tool_list = []
-                    for tool in tools:
-                        simplified_tool = {
-                            "name": tool.name,
-                            "description": tool.description[:200] + "..." if len(tool.description) > 200 else tool.description,
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {
-                                    "prompt": {
-                                        "type": "string",
-                                        "description": "Your request or question"
-                                    }
-                                },
-                                "required": ["prompt"]
-                            }
-                        }
-                        tool_list.append(simplified_tool)
-                    logger.info(f"[MCP HTTP] Returning {len(tool_list)} tools with simplified schemas")
-                
-                # Create initial response
+                # Create response
                 response = {
                     "jsonrpc": "2.0",
                     "id": message_id,
                     "result": {"tools": tool_list}
                 }
                 
-                # Check response size and chunk if necessary
+                # Check response size and chunk if necessary for mobile compatibility
                 response_size = len(json.dumps(response))
                 chunk_threshold = chunk_size_kb * 1024  # Convert to bytes
                 
                 if response_size > chunk_threshold:
                     logger.info(f"[MCP Chunking] Response size {response_size} bytes exceeds threshold {chunk_threshold} bytes, chunking with {chunk_size_kb}KB chunks...")
-                    # Use the chunking method to split into multiple responses
+                    # Use intelligent chunking to split large responses for mobile compatibility
                     for chunk_response in self._chunk_tools_response(tool_list, message_id, chunk_size_kb):
                         yield f"data: {json.dumps(chunk_response)}\n\n"
                     return  # Exit early since we've already yielded all chunks
@@ -293,27 +246,8 @@ class HTTPTransport:
                 tool_name = params.get("name")
                 arguments = params.get("arguments", {})
                 
-                # Convert simplified arguments to Zen MCP format
-                if "prompt" in arguments and tool_name != "listmodels" and tool_name != "version":
-                    # For most tools, map the prompt to appropriate fields
-                    zen_arguments = {
-                        "prompt": arguments["prompt"],
-                        "model": "auto",  # Use auto model selection
-                    }
-                    # Add step workflow for workflow tools
-                    if tool_name in ["thinkdeep", "planner", "consensus", "codereview", "precommit", "debug", "secaudit", "docgen", "analyze", "refactor", "tracer", "testgen"]:
-                        zen_arguments.update({
-                            "step": arguments["prompt"],
-                            "step_number": 1,
-                            "total_steps": 3,
-                            "next_step_required": False,
-                            "findings": "Starting analysis based on user request"
-                        })
-                else:
-                    zen_arguments = arguments
-                
-                # Call the existing tool handler
-                result = await handle_call_tool(tool_name, zen_arguments)
+                # Call the tool handler with full arguments (no simplified mapping needed)
+                result = await handle_call_tool(tool_name, arguments)
                 response = {
                     "jsonrpc": "2.0",
                     "id": message_id,
