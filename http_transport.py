@@ -7,6 +7,7 @@ to enable direct connections from ChatMCP iOS and other HTTP-based MCP clients.
 """
 
 import asyncio
+import gzip
 import json
 import logging
 import uuid
@@ -15,6 +16,7 @@ from typing import Any, Dict, Optional
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from mcp.types import (
     CallToolRequest,
@@ -48,6 +50,9 @@ class HTTPTransport:
             allow_headers=["*"],
         )
         
+        # Add gzip compression for responses > 4KB
+        self.app.add_middleware(GZipMiddleware, minimum_size=4096)
+        
         self._setup_routes()
     
     def _setup_routes(self):
@@ -74,6 +79,10 @@ class HTTPTransport:
             
             session = self.sessions[session_id]
             
+            # Parse query parameters for enhanced features
+            query_params = dict(request.query_params)
+            view_mode = query_params.get("view", "compact")  # compact or full
+            
             # Parse request body
             try:
                 body = await request.json()
@@ -81,16 +90,19 @@ class HTTPTransport:
                 logger.error(f"Failed to parse request body: {e}")
                 raise HTTPException(status_code=400, detail="Invalid JSON")
             
-            # Create streaming response
-            response_generator = self._handle_mcp_message(session_id, session, body)
+            # Create streaming response with compression support
+            response_generator = self._handle_mcp_message(session_id, session, body, query_params)
+            headers = {
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Mcp-Session-Id": session_id,
+                "Vary": "view"  # Cache varies on view parameter
+            }
+            
             return StreamingResponse(
                 response_generator,
                 media_type="text/event-stream",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "Connection": "keep-alive",
-                    "Mcp-Session-Id": session_id,
-                }
+                headers=headers
             )
         
         @self.app.get("/health")
@@ -98,7 +110,7 @@ class HTTPTransport:
             """Health check endpoint."""
             return {"status": "ok", "server": "zen-mcp-http"}
     
-    async def _handle_mcp_message(self, session_id: str, session: Dict[str, Any], message: Dict[str, Any]):
+    async def _handle_mcp_message(self, session_id: str, session: Dict[str, Any], message: Dict[str, Any], query_params: Dict[str, str] = None):
         """Handle individual MCP messages and yield SSE responses."""
         method = message.get("method")
         message_id = message.get("id")
@@ -121,29 +133,64 @@ class HTTPTransport:
             
             elif method == "tools/list":
                 tools = await handle_list_tools()
-                # Simplify tools for ChatMCP iOS compatibility
-                simplified_tools = []
-                for tool in tools:
-                    simplified_tool = {
-                        "name": tool.name,
-                        "description": tool.description[:200] + "..." if len(tool.description) > 200 else tool.description,
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "prompt": {
-                                    "type": "string",
-                                    "description": "Your request or question"
-                                }
-                            },
-                            "required": ["prompt"]
+                
+                # Parse query parameters
+                query_params = query_params or {}
+                view_mode = query_params.get("view", "compact")
+                
+                # Handle tool pagination and filtering
+                tool_ids = query_params.get("ids")
+                if tool_ids:
+                    # Selective tool loading: ?ids=chat,thinkdeep,debug
+                    requested_ids = [id.strip() for id in tool_ids.split(",")]
+                    tools = [tool for tool in tools if tool.name in requested_ids]
+                else:
+                    # Pagination: ?page=1&limit=10
+                    try:
+                        page = int(query_params.get("page", "1"))
+                        limit = min(int(query_params.get("limit", "50")), 1000)  # Cap at 1000
+                        start_idx = (page - 1) * limit
+                        end_idx = start_idx + limit
+                        tools = tools[start_idx:end_idx]
+                    except (ValueError, TypeError):
+                        # Invalid pagination params, use all tools
+                        pass
+                
+                if view_mode == "full":
+                    # Return original complex schemas for power users
+                    tool_list = []
+                    for tool in tools:
+                        tool_list.append({
+                            "name": tool.name,
+                            "description": tool.description,
+                            "inputSchema": tool.inputSchema
+                        })
+                    logger.info(f"[MCP HTTP] Returning {len(tool_list)} tools with full schemas")
+                else:
+                    # Return simplified schemas for mobile compatibility
+                    tool_list = []
+                    for tool in tools:
+                        simplified_tool = {
+                            "name": tool.name,
+                            "description": tool.description[:200] + "..." if len(tool.description) > 200 else tool.description,
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "prompt": {
+                                        "type": "string",
+                                        "description": "Your request or question"
+                                    }
+                                },
+                                "required": ["prompt"]
+                            }
                         }
-                    }
-                    simplified_tools.append(simplified_tool)
+                        tool_list.append(simplified_tool)
+                    logger.info(f"[MCP HTTP] Returning {len(tool_list)} tools with simplified schemas")
                 
                 response = {
                     "jsonrpc": "2.0",
                     "id": message_id,
-                    "result": {"tools": simplified_tools}
+                    "result": {"tools": tool_list}
                 }
             
             elif method == "tools/call":
