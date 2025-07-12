@@ -32,10 +32,7 @@ from server import server, handle_call_tool, handle_list_tools, handle_list_prom
 
 logger = logging.getLogger(__name__)
 
-# Configuration for response chunking
-DEFAULT_CHUNK_SIZE_KB = 20  # 20KB chunks for mobile compatibility
-MIN_CHUNK_SIZE_KB = 8       # Minimum viable chunk size
-MAX_CHUNK_SIZE_KB = 50      # Maximum chunk size for memory efficiency
+# No chunking needed - iOS Safari handles 200KB+ SSE events easily
 
 class HTTPTransport:
     """HTTP transport implementation for MCP using FastAPI."""
@@ -142,6 +139,13 @@ class HTTPTransport:
                     detail="Not Acceptable: Client must accept text/event-stream"
                 )
             
+            # Detect mobile clients for appropriate schema optimization
+            user_agent = request.headers.get("User-Agent", "").lower()
+            is_mobile = any(mobile_ua in user_agent for mobile_ua in [
+                "mobile", "iphone", "ipad", "android", "chatmcp"
+            ])
+            logger.debug(f"[MCP HTTP] User-Agent: {user_agent}, Mobile detected: {is_mobile}")
+            
             # Get or create session
             session_id = request.headers.get("Mcp-Session-Id")
             if not session_id or session_id not in self.sessions:
@@ -150,16 +154,7 @@ class HTTPTransport:
             
             session = self.sessions[session_id]
             
-            # Parse query parameters - only preserve chunk_size for debugging/optimization
-            query_params = dict(request.query_params)
-            chunk_size_kb = DEFAULT_CHUNK_SIZE_KB
-            if "chunk_size" in query_params:
-                try:
-                    requested_chunk_size = int(query_params["chunk_size"])
-                    chunk_size_kb = max(MIN_CHUNK_SIZE_KB, min(requested_chunk_size, MAX_CHUNK_SIZE_KB))
-                    logger.debug(f"[MCP HTTP] Using custom chunk size: {chunk_size_kb}KB")
-                except (ValueError, TypeError):
-                    logger.warning(f"[MCP HTTP] Invalid chunk_size parameter, using default: {DEFAULT_CHUNK_SIZE_KB}KB")
+            # No query parameter processing needed anymore
             
             # Parse request body
             try:
@@ -169,7 +164,7 @@ class HTTPTransport:
                 raise HTTPException(status_code=400, detail="Invalid JSON")
             
             # Create streaming response with compression support
-            response_generator = self._handle_mcp_message(session_id, session, body, chunk_size_kb)
+            response_generator = self._handle_mcp_message(session_id, session, body, is_mobile)
             headers = {
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
@@ -186,8 +181,25 @@ class HTTPTransport:
         async def health_check():
             """Health check endpoint."""
             return {"status": "ok", "server": "zen-mcp-http"}
+        
+        @self.app.get("/sse-test")
+        async def sse_size_test():
+            """Test SSE size limits empirically."""
+            async def test_generator():
+                # Test various payload sizes to find the limit
+                sizes = [32*1024, 64*1024, 96*1024, 128*1024, 160*1024, 200*1024]
+                for size in sizes:
+                    payload = "x" * size
+                    yield f"event: test\nid: {size}\ndata: {payload}\n\n"
+                    await asyncio.sleep(1)  # 1 second between tests
+            
+            return StreamingResponse(
+                test_generator(),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
+            )
     
-    async def _handle_mcp_message(self, session_id: str, session: Dict[str, Any], message: Dict[str, Any], chunk_size_kb: int = DEFAULT_CHUNK_SIZE_KB):
+    async def _handle_mcp_message(self, session_id: str, session: Dict[str, Any], message: Dict[str, Any], is_mobile: bool = False):
         """Handle individual MCP messages and yield SSE responses."""
         method = message.get("method")
         message_id = message.get("id")
@@ -211,16 +223,54 @@ class HTTPTransport:
             elif method == "tools/list":
                 tools = await handle_list_tools()
                 
-                # Build full tool schemas with complete functionality
+                # Build tool schemas optimized for client type
                 tool_list = []
                 for tool in tools:
-                    tool_list.append({
-                        "name": tool.name,
-                        "description": tool.description,
-                        "inputSchema": tool.inputSchema
-                    })
+                    if is_mobile:
+                        # Mobile optimization: trim description and simplify schema
+                        simplified_description = tool.description
+                        if len(simplified_description) > 150:
+                            simplified_description = simplified_description[:147] + "..."
+                        
+                        # Aggressively simplify input schema for mobile
+                        def simplify_property(prop):
+                            """Strip verbose parts from property definitions"""
+                            if isinstance(prop, dict):
+                                simplified = {"type": prop.get("type", "string")}
+                                if "description" in prop and len(prop["description"]) < 50:
+                                    simplified["description"] = prop["description"]
+                                if "enum" in prop:
+                                    simplified["enum"] = prop["enum"]
+                                return simplified
+                            return prop
+                        
+                        simplified_schema = {
+                            "type": "object",
+                            "properties": {},
+                            "required": tool.inputSchema.get("required", [])
+                        }
+                        
+                        # Keep essential properties but simplify their definitions
+                        if "properties" in tool.inputSchema:
+                            props = tool.inputSchema["properties"]
+                            for key, value in props.items():
+                                simplified_schema["properties"][key] = simplify_property(value)
+                        
+                        tool_list.append({
+                            "name": tool.name,
+                            "description": simplified_description,
+                            "inputSchema": simplified_schema
+                        })
+                    else:
+                        # Desktop: full schemas with complete functionality
+                        tool_list.append({
+                            "name": tool.name,
+                            "description": tool.description,
+                            "inputSchema": tool.inputSchema
+                        })
                 
-                logger.info(f"[MCP HTTP] Returning {len(tool_list)} tools with full schemas")
+                schema_type = "mobile-optimized" if is_mobile else "full"
+                logger.info(f"[MCP HTTP] Returning {len(tool_list)} tools with {schema_type} schemas")
                 
                 # Create response
                 response = {
@@ -229,18 +279,12 @@ class HTTPTransport:
                     "result": {"tools": tool_list}
                 }
                 
-                # Check response size and chunk if necessary for mobile compatibility
+                # Log response size for monitoring
                 response_size = len(json.dumps(response))
-                chunk_threshold = chunk_size_kb * 1024  # Convert to bytes
+                logger.info(f"[MCP HTTP] {schema_type.title()} response size: {response_size} bytes")
                 
-                if response_size > chunk_threshold:
-                    logger.info(f"[MCP Chunking] Response size {response_size} bytes exceeds threshold {chunk_threshold} bytes, chunking with {chunk_size_kb}KB chunks...")
-                    # Use intelligent chunking to split large responses for mobile compatibility
-                    for chunk_response in self._chunk_tools_response(tool_list, message_id, chunk_size_kb):
-                        yield f"data: {json.dumps(chunk_response)}\n\n"
-                    return  # Exit early since we've already yielded all chunks
-                else:
-                    logger.debug(f"[MCP HTTP] Response size {response_size} bytes is under threshold {chunk_threshold} bytes, sending single response")
+                # Send single response - iOS Safari can handle 200KB+ easily
+                # No chunking needed since our 108KB response is well under the limit
             
             elif method == "tools/call":
                 tool_name = params.get("name")
