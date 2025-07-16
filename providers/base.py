@@ -18,6 +18,7 @@ class ProviderType(Enum):
     OPENROUTER = "openrouter"
     CUSTOM = "custom"
     DIAL = "dial"
+    MOONSHOT = "moonshot"
 
 
 class TemperatureConstraint(ABC):
