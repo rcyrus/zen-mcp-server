@@ -167,7 +167,9 @@ class TestMoonshotProvider:
         assert provider.validate_model_name("moonshot-latest") is True  # Alias for kimi-latest
 
         # Models not explicitly listed (even if aliases exist) should not be allowed
-        assert provider.validate_model_name("kimi-thinking") is False  # Not listed (moonshot-thinking is listed instead)
+        assert (
+            provider.validate_model_name("kimi-thinking") is False
+        )  # Not listed (moonshot-thinking is listed instead)
 
     @patch.dict(os.environ, {"MOONSHOT_ALLOWED_MODELS": ""})
     def test_empty_restrictions_allows_all(self):
@@ -245,7 +247,9 @@ class TestMoonshotProvider:
 
         # Call generate_content with alias 'moonshot-latest'
         result = provider.generate_content(
-            prompt="Test prompt", model_name="moonshot-latest", temperature=0.7  # This should be resolved to "kimi-latest"
+            prompt="Test prompt",
+            model_name="moonshot-latest",
+            temperature=0.7,  # This should be resolved to "kimi-latest"
         )
 
         # Verify the API was called with the RESOLVED model name
@@ -253,7 +257,9 @@ class TestMoonshotProvider:
         call_kwargs = mock_client.chat.completions.create.call_args[1]
 
         # CRITICAL ASSERTION: The API should receive "kimi-latest", not "moonshot-latest"
-        assert call_kwargs["model"] == "kimi-latest", f"Expected 'kimi-latest' but API received '{call_kwargs['model']}'"
+        assert (
+            call_kwargs["model"] == "kimi-latest"
+        ), f"Expected 'kimi-latest' but API received '{call_kwargs['model']}'"
 
         # Verify other parameters
         assert call_kwargs["temperature"] == 0.7
