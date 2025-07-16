@@ -152,5 +152,5 @@ class XAIModelProvider(OpenAICompatibleProvider):
         try:
             capabilities = self.get_capabilities(model_name)
             return capabilities.supports_extended_thinking
-        except Exception:
+        except ValueError:
             return False
