@@ -11,6 +11,7 @@ Environment Variables:
 - GOOGLE_ALLOWED_MODELS: Comma-separated list of allowed Gemini models
 - XAI_ALLOWED_MODELS: Comma-separated list of allowed X.AI GROK models
 - MOONSHOT_ALLOWED_MODELS: Comma-separated list of allowed Moonshot Kimi models
+- GROQ_ALLOWED_MODELS: Comma-separated list of allowed Groq models
 - OPENROUTER_ALLOWED_MODELS: Comma-separated list of allowed OpenRouter models
 - DIAL_ALLOWED_MODELS: Comma-separated list of allowed DIAL models
 
@@ -19,6 +20,7 @@ Example:
     GOOGLE_ALLOWED_MODELS=flash
     XAI_ALLOWED_MODELS=grok-3,grok-3-fast
     MOONSHOT_ALLOWED_MODELS=kimi-latest,kimi-thinking
+    GROQ_ALLOWED_MODELS=gemma2,llama-8b,llama-70b
     OPENROUTER_ALLOWED_MODELS=opus,sonnet,mistral
 """
 
@@ -47,6 +49,7 @@ class ModelRestrictionService:
         ProviderType.GOOGLE: "GOOGLE_ALLOWED_MODELS",
         ProviderType.XAI: "XAI_ALLOWED_MODELS",
         ProviderType.MOONSHOT: "MOONSHOT_ALLOWED_MODELS",
+        ProviderType.GROQ: "GROQ_ALLOWED_MODELS",
         ProviderType.OPENROUTER: "OPENROUTER_ALLOWED_MODELS",
         ProviderType.DIAL: "DIAL_ALLOWED_MODELS",
     }

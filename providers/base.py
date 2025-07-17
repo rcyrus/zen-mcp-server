@@ -19,6 +19,7 @@ class ProviderType(Enum):
     CUSTOM = "custom"
     DIAL = "dial"
     MOONSHOT = "moonshot"
+    GROQ = "groq"
 
 
 class TemperatureConstraint(ABC):
