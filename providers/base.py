@@ -25,6 +25,7 @@ class ProviderType(Enum):
     DIAL = "dial"
     MOONSHOT = "moonshot"
     GROQ = "groq"
+    VERTEX_AI = "vertex_ai"
 
 
 class TemperatureConstraint(ABC):
