@@ -36,7 +36,7 @@ try:
     # Load environment variables from .env file in the script's directory
     # This ensures .env is loaded regardless of the current working directory
     script_dir = Path(__file__).parent
-    env_file = script_dir / ".env"
+    env_file = ".env"
     load_dotenv(dotenv_path=env_file)
 except ImportError:
     # dotenv not available - this is fine, environment variables can still be passed directly
@@ -396,6 +396,7 @@ def configure_providers():
         "GEMINI_API_KEY",
         "XAI_API_KEY",
         "MOONSHOT_API_KEY",
+        "PERPLEXITY_API_KEY",
         "CUSTOM_API_URL",
     ]
     for key in api_keys_to_check:
@@ -529,10 +530,10 @@ def configure_providers():
             ModelProviderRegistry.register_provider(ProviderType.GROQ, GroqProvider)
         if dial_key and dial_key != "your_dial_api_key_here":
             ModelProviderRegistry.register_provider(ProviderType.DIAL, DIALModelProvider)
-        if vertex_project_id:
-            ModelProviderRegistry.register_provider(ProviderType.VERTEX_AI, VertexAIProvider)
         if perplexity_key and perplexity_key != "your_perplexity_api_key_here":
             ModelProviderRegistry.register_provider(ProviderType.PERPLEXITY, PerplexityProvider)
+        if vertex_project_id:
+            ModelProviderRegistry.register_provider(ProviderType.VERTEX_AI, VertexAIProvider)
 
     # 2. Custom provider second (for local/private models)
     if has_custom:

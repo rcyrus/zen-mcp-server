@@ -46,6 +46,7 @@ class ModelRestrictionService:
     # Environment variable names
     ENV_VARS = {
         ProviderType.OPENAI: "OPENAI_ALLOWED_MODELS",
+        ProviderType.PERPLEXITY: "PERPLEXITY_ALLOWED_MODELS",
         ProviderType.GOOGLE: "GOOGLE_ALLOWED_MODELS",
         ProviderType.XAI: "XAI_ALLOWED_MODELS",
         ProviderType.MOONSHOT: "MOONSHOT_ALLOWED_MODELS",
