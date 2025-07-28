@@ -1014,6 +1014,8 @@ setup_env_file() {
         "GEMINI_API_KEY:your_gemini_api_key_here"
         "OPENAI_API_KEY:your_openai_api_key_here"
         "XAI_API_KEY:your_xai_api_key_here"
+        "MOONSHOT_API_KEY:your_moonshot_api_key_here"
+        "GROQ_API_KEY:your_groq_api_key_here"
         "DIAL_API_KEY:your_dial_api_key_here"
         "VERTEX_PROJECT_ID:your_vertex_project_id_here"
         "VERTEX_REGION:us-central1"
@@ -1068,6 +1070,8 @@ check_api_keys() {
         "GEMINI_API_KEY:your_gemini_api_key_here"
         "OPENAI_API_KEY:your_openai_api_key_here"
         "XAI_API_KEY:your_xai_api_key_here"
+        "MOONSHOT_API_KEY:your_moonshot_api_key_here"
+        "GROQ_API_KEY:your_groq_api_key_here"
         "DIAL_API_KEY:your_dial_api_key_here"
         "OPENROUTER_API_KEY:your_openrouter_api_key_here"
     )
@@ -1103,21 +1107,8 @@ check_api_keys() {
     fi
     
     if [[ "$has_key" == false ]]; then
-        print_warning "No API keys found in .env!"
-        echo ""
-        echo "The Python development environment will be set up, but you won't be able to use the MCP server until you add API keys."
-        echo ""
-        echo "To add API keys, edit .env and add at least one:"
-        echo "  GEMINI_API_KEY=your-actual-key"
-        echo "  OPENAI_API_KEY=your-actual-key"
-        echo "  XAI_API_KEY=your-actual-key"
-        echo "  DIAL_API_KEY=your-actual-key"
-        echo "  VERTEX_PROJECT_ID=your-actual-project-id"
-        echo "  VERTEX_REGION=us-central1 (both required for Vertex AI)"
-        echo "  OPENROUTER_API_KEY=your-actual-key"
-        echo ""
-        print_info "You can continue with development setup and add API keys later."
-        echo ""
+        echo "  MOONSHOT_API_KEY=your-actual-key" >&2
+        echo "  GROQ_API_KEY=your-actual-key" >&2
     fi
     
     return 0  # Always return success to continue setup

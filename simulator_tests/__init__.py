@@ -22,6 +22,7 @@ from .test_debug_validation import DebugValidationTest
 from .test_line_number_validation import LineNumberValidationTest
 from .test_logs_validation import LogsValidationTest
 from .test_model_thinking_config import TestModelThinkingConfig
+from .test_moonshot_models import MoonshotModelsTest
 from .test_o3_model_selection import O3ModelSelectionTest
 from .test_o3_pro_expensive import O3ProExpensiveTest
 from .test_ollama_custom_url import OllamaCustomUrlTest
@@ -74,6 +75,7 @@ TEST_REGISTRY = {
     "vertex_ai_models": VertexAIModelsTest,
     "vision_capability": VisionCapabilityTest,
     "xai_models": XAIModelsTest,
+    "moonshot_models": MoonshotModelsTest,
     "consensus_conversation": TestConsensusConversation,
     "consensus_workflow_accurate": TestConsensusWorkflowAccurate,
     "consensus_three_models": TestConsensusThreeModels,
@@ -113,6 +115,7 @@ __all__ = [
     "VertexAIModelsTest",
     "VisionCapabilityTest",
     "XAIModelsTest",
+    "MoonshotModelsTest",
     "TestConsensusConversation",
     "TestConsensusWorkflowAccurate",
     "TestConsensusThreeModels",
