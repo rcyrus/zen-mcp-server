@@ -62,8 +62,7 @@ class CustomProvider(OpenAICompatibleProvider):
         # set a dummy API key to avoid OpenAI client header issues
         if not api_key:
             api_key = "dummy-key-for-unauthenticated-endpoint"
-            logging.debug(
-                "Using dummy API key for unauthenticated custom endpoint")
+            logging.debug("Using dummy API key for unauthenticated custom endpoint")
 
         logging.info(f"Initializing Custom provider with endpoint: {base_url}")
 
@@ -75,8 +74,7 @@ class CustomProvider(OpenAICompatibleProvider):
             # Log loaded models and aliases only on first load
             models = self._registry.list_models()
             aliases = self._registry.list_aliases()
-            logging.info(
-                f"Custom provider loaded {len(models)} models with {len(aliases)} aliases")
+            logging.info(f"Custom provider loaded {len(models)} models with {len(aliases)} aliases")
 
     def _resolve_model_name(self, model_name: str) -> str:
         """Resolve model aliases to actual model names.
@@ -95,29 +93,25 @@ class CustomProvider(OpenAICompatibleProvider):
 
         if config:
             if config.model_name != model_name:
-                logging.info(
-                    f"Resolved model alias '{model_name}' to '{config.model_name}'")
+                logging.info(f"Resolved model alias '{model_name}' to '{config.model_name}'")
             return config.model_name
         else:
             # If not found in registry, handle version tags for local models
             # Strip version tags (anything after ':') for Ollama-style models
             if ":" in model_name:
                 base_model = model_name.split(":")[0]
-                logging.debug(
-                    f"Stripped version tag from '{model_name}' -> '{base_model}'")
+                logging.debug(f"Stripped version tag from '{model_name}' -> '{base_model}'")
 
                 # Try to resolve the base model through registry
                 base_config = self._registry.resolve(base_model)
                 if base_config:
-                    logging.info(
-                        f"Resolved base model '{base_model}' to '{base_config.model_name}'")
+                    logging.info(f"Resolved base model '{base_model}' to '{base_config.model_name}'")
                     return base_config.model_name
                 else:
                     return base_model
             else:
                 # If not found in registry and no version tag, return as-is
-                logging.debug(
-                    f"Model '{model_name}' not found in registry, using as-is")
+                logging.debug(f"Model '{model_name}' not found in registry, using as-is")
                 return model_name
 
     def get_capabilities(self, model_name: str) -> ModelCapabilities:
@@ -141,8 +135,7 @@ class CustomProvider(OpenAICompatibleProvider):
 
                 restriction_service = get_restriction_service()
                 if not restriction_service.is_allowed(ProviderType.OPENROUTER, config.model_name, model_name):
-                    raise ValueError(
-                        f"OpenRouter model '{model_name}' is not allowed by restriction policy.")
+                    raise ValueError(f"OpenRouter model '{model_name}' is not allowed by restriction policy.")
 
                 # Update provider type to OPENROUTER for OpenRouter models
                 capabilities.provider = ProviderType.OPENROUTER
@@ -171,8 +164,7 @@ class CustomProvider(OpenAICompatibleProvider):
                 supports_streaming=True,
                 supports_function_calling=False,  # Conservative default
                 supports_temperature=True,  # Most custom models accept temperature parameter
-                temperature_constraint=RangeTemperatureConstraint(
-                    0.0, 2.0, 0.7),
+                temperature_constraint=RangeTemperatureConstraint(0.0, 2.0, 0.7),
             )
 
             # Mark as generic for validation purposes
@@ -204,8 +196,7 @@ class CustomProvider(OpenAICompatibleProvider):
             model_id = config.model_name
             # Use explicit is_custom flag for clean validation
             if config.is_custom:
-                logging.debug(
-                    f"... [Custom] Model '{model_name}' -> '{model_id}' validated via registry")
+                logging.debug(f"... [Custom] Model '{model_name}' -> '{model_id}' validated via registry")
                 return True
             else:
                 # This is a cloud/OpenRouter model - CustomProvider should NOT handle these
@@ -217,8 +208,7 @@ class CustomProvider(OpenAICompatibleProvider):
         clean_model_name = model_name
         if ":" in model_name:
             clean_model_name = model_name.split(":")[0]
-            logging.debug(
-                f"Stripped version tag from '{model_name}' -> '{clean_model_name}'")
+            logging.debug(f"Stripped version tag from '{model_name}' -> '{clean_model_name}'")
             # Try to resolve the clean name
             config = self._registry.resolve(clean_model_name)
             if config:
@@ -230,19 +220,16 @@ class CustomProvider(OpenAICompatibleProvider):
 
         # Accept models with explicit local indicators in the name
         if any(indicator in clean_model_name.lower() for indicator in ["local", "ollama", "vllm", "lmstudio"]):
-            logging.debug(
-                f"Model '{clean_model_name}' validated via local indicators")
+            logging.debug(f"Model '{clean_model_name}' validated via local indicators")
             return True
 
         # Accept simple model names without vendor prefix (likely local/custom models)
         if "/" not in clean_model_name:
-            logging.debug(
-                f"Model '{clean_model_name}' validated as potential local model (no vendor prefix)")
+            logging.debug(f"Model '{clean_model_name}' validated as potential local model (no vendor prefix)")
             return True
 
         # Reject everything else (likely cloud models not in registry)
-        logging.debug(
-            f"Model '{model_name}' rejected by custom provider (appears to be cloud model)")
+        logging.debug(f"Model '{model_name}' rejected by custom provider (appears to be cloud model)")
         return False
 
     def generate_content(
@@ -316,13 +303,8 @@ class CustomProvider(OpenAICompatibleProvider):
                 if self.validate_model_name(model_name):
                     config = self._registry.resolve(model_name)
                     # Skip built-in placeholder model when user supplies their own model via env var
-                    custom_env_model = os.getenv(
-                        "CUSTOM_MODEL_NAME", "").strip()
-                    if (
-                        custom_env_model
-                        and custom_env_model.lower() != "llama3.2"
-                        and model_name.lower() == "llama3.2"
-                    ):
+                    custom_env_model = os.getenv("CUSTOM_MODEL_NAME", "").strip()
+                    if custom_env_model and custom_env_model.lower() != "llama3.2" and model_name.lower() == "llama3.2":
                         # Suppress noise: don't include default llama3.2 entry when it's not the chosen env model
                         continue
                     if config and config.is_custom:
@@ -337,8 +319,7 @@ class CustomProvider(OpenAICompatibleProvider):
             # Add a generic capability set so that the model shows up in
             # list_models() and can be selected by fallback logic even when it
             # is not present in conf/custom_models.json.
-            logging.debug(
-                f"Adding env-specified custom model '{custom_env_model}' to configurations")
+            logging.debug(f"Adding env-specified custom model '{custom_env_model}' to configurations")
 
             configs[custom_env_model] = ModelCapabilities(
                 provider=ProviderType.CUSTOM,
@@ -351,8 +332,7 @@ class CustomProvider(OpenAICompatibleProvider):
                 supports_streaming=True,
                 supports_function_calling=False,
                 supports_temperature=True,
-                temperature_constraint=RangeTemperatureConstraint(
-                    0.0, 2.0, 0.7),
+                temperature_constraint=RangeTemperatureConstraint(0.0, 2.0, 0.7),
                 is_custom=True,
             )
 
