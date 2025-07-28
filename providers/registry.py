@@ -127,6 +127,7 @@ class ModelProviderRegistry:
             ProviderType.XAI,  # Direct X.AI GROK access
             ProviderType.MOONSHOT,  # Direct Moonshot access
             ProviderType.GROQ,  # Direct Groq access for ultra-fast inference
+            ProviderType.PERPLEXITY,  # Perplexity API access
             ProviderType.DIAL,  # DIAL unified API access
             ProviderType.VERTEX_AI,  # Google Vertex AI access
             ProviderType.CUSTOM,  # Local/self-hosted models
@@ -251,6 +252,7 @@ class ModelProviderRegistry:
             ProviderType.DIAL: "DIAL_API_KEY",
             ProviderType.MOONSHOT: "MOONSHOT_API_KEY",
             ProviderType.GROQ: "GROQ_API_KEY",
+            ProviderType.PERPLEXITY: "PERPLEXITY_API_KEY",
         }
 
         env_var = key_mapping.get(provider_type)

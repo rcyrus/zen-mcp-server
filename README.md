@@ -297,6 +297,7 @@ nano .env
 # MOONSHOT_API_KEY=your-moonshot-key-here  # For Moonshot Kimi models
 # GROQ_API_KEY=your-groq-api-key-here      # For Groq ultra-fast inference
 # OPENROUTER_API_KEY=your-openrouter-key  # For OpenRouter (see docs/custom_models.md)
+# PERPLEXITY_API_KEY=your-perplexity-key   # For Perplexity Sonar models
 # DIAL_API_KEY=your-dial-api-key-here      # For DIAL platform
 
 # For DIAL (optional configuration):
@@ -305,9 +306,9 @@ nano .env
 # DIAL_ALLOWED_MODELS=o3,gemini-2.5-pro    # Restrict to specific models (optional)
 
 # For local models (Ollama, vLLM, etc.):
-# CUSTOM_API_URL=http://localhost:11434/v1  # Ollama example
-# CUSTOM_API_KEY=                                      # Empty for Ollama
-# CUSTOM_MODEL_NAME=llama3.2                          # Default model
+# CUSTOM_API_URL=http://localhost:11434/v1 # Ollama example
+# CUSTOM_API_KEY=                          # Empty for Ollama
+# CUSTOM_MODEL_NAME=llama3.2               # Default model
 
 # Note: At least one API key OR custom URL is required
 ```
