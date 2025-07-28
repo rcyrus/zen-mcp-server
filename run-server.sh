@@ -1061,8 +1061,8 @@ migrate_env_file() {
     echo "  (Backup saved as .env.backup_*)"
 }
 
-# Validate API keys
-validate_api_keys() {
+# Check API keys and warn if missing (non-blocking)
+check_api_keys() {
     local has_key=false
     local api_keys=(
         "GEMINI_API_KEY:your_gemini_api_key_here"
@@ -1103,24 +1103,26 @@ validate_api_keys() {
     fi
     
     if [[ "$has_key" == false ]]; then
-        print_error "No API keys found in .env!"
-        echo "" >&2
-        echo "Please edit .env and add at least one API key:" >&2
-        echo "  GEMINI_API_KEY=your-actual-key" >&2
-        echo "  OPENAI_API_KEY=your-actual-key" >&2
-        echo "  XAI_API_KEY=your-actual-key" >&2
-        echo "  DIAL_API_KEY=your-actual-key" >&2
-        echo "  VERTEX_PROJECT_ID=your-actual-project-id" >&2
-        echo "  VERTEX_REGION=us-central1 (both required for Vertex AI)" >&2
-        echo "  OPENROUTER_API_KEY=your-actual-key" >&2
-        echo "" >&2
-        print_info "After adding your API keys, run ./run-server.sh again" >&2
-        echo "" >&2
-        return 1
+        print_warning "No API keys found in .env!"
+        echo ""
+        echo "The Python development environment will be set up, but you won't be able to use the MCP server until you add API keys."
+        echo ""
+        echo "To add API keys, edit .env and add at least one:"
+        echo "  GEMINI_API_KEY=your-actual-key"
+        echo "  OPENAI_API_KEY=your-actual-key"
+        echo "  XAI_API_KEY=your-actual-key"
+        echo "  DIAL_API_KEY=your-actual-key"
+        echo "  VERTEX_PROJECT_ID=your-actual-project-id"
+        echo "  VERTEX_REGION=us-central1 (both required for Vertex AI)"
+        echo "  OPENROUTER_API_KEY=your-actual-key"
+        echo ""
+        print_info "You can continue with development setup and add API keys later."
+        echo ""
     fi
     
-    return 0
+    return 0  # Always return success to continue setup
 }
+
 
 # ----------------------------------------------------------------------------
 # Claude Integration Functions
@@ -1640,8 +1642,8 @@ main() {
         set +a
     fi
     
-    # Step 4: Validate API keys
-    validate_api_keys || exit 1
+    # Step 4: Check API keys (non-blocking - just warn if missing)
+    check_api_keys
     
     # Step 5: Setup Python environment (uv-first approach)
     local python_cmd
@@ -1669,7 +1671,7 @@ main() {
     echo "Logs will be written to: $script_dir/$LOG_DIR/$LOG_FILE"
     echo ""
     
-    # Step 11: Handle command line arguments
+    # Step 12: Handle command line arguments
     if [[ "$arg" == "-f" ]] || [[ "$arg" == "--follow" ]]; then
         follow_logs
     else
