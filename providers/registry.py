@@ -75,7 +75,7 @@ class ModelProviderRegistry:
         # Get provider class or factory function
         provider_class = instance._providers[provider_type]
 
-        # For custom providers, handle special initialization requirements
+        # For special providers, handle custom initialization requirements
         if provider_type == ProviderType.CUSTOM:
             # Check if it's a factory function (callable but not a class)
             if callable(provider_class) and not isinstance(provider_class, type):
@@ -93,10 +93,19 @@ class ModelProviderRegistry:
                 api_key = api_key or ""
                 # Initialize custom provider with both API key and base URL
                 provider = provider_class(api_key=api_key, base_url=custom_url)
+        elif provider_type == ProviderType.VERTEX_AI:
+            # Vertex AI uses project_id and region instead of API key
+            project_id = os.getenv("VERTEX_PROJECT_ID")
+            if not project_id:
+                logging.debug("VERTEX_PROJECT_ID not set – skipping Vertex AI provider")
+                return None
+            region = os.getenv("VERTEX_REGION", "us-central1")
+            # Initialize Vertex AI provider with project_id and region
+            provider = provider_class(project_id=project_id, region=region)
         else:
             if not api_key:
                 return None
-            # Initialize non-custom provider with just API key
+            # Initialize standard provider with just API key
             provider = provider_class(api_key=api_key)
 
         # Cache the instance
@@ -120,6 +129,21 @@ class ModelProviderRegistry:
             ModelProvider instance that supports this model
         """
         logging.debug(f"get_provider_for_model called with model_name='{model_name}'")
+
+        # Define explicit provider priority order
+        # Native APIs first, then custom endpoints, then catch-all providers
+        PROVIDER_PRIORITY_ORDER = [
+            ProviderType.GOOGLE,  # Direct Gemini access
+            ProviderType.OPENAI,  # Direct OpenAI access
+            ProviderType.XAI,  # Direct X.AI GROK access
+            ProviderType.MOONSHOT,  # Direct Moonshot access
+            ProviderType.GROQ,  # Direct Groq access for ultra-fast inference
+            ProviderType.PERPLEXITY,  # Perplexity API access
+            ProviderType.DIAL,  # DIAL unified API access
+            ProviderType.VERTEX_AI,  # Google Vertex AI access
+            ProviderType.CUSTOM,  # Local/self-hosted models
+            ProviderType.OPENROUTER,  # Catch-all for cloud models
+        ]
 
         # Check providers in priority order
         instance = cls()
@@ -234,8 +258,12 @@ class ModelProviderRegistry:
             ProviderType.OPENAI: "OPENAI_API_KEY",
             ProviderType.XAI: "XAI_API_KEY",
             ProviderType.OPENROUTER: "OPENROUTER_API_KEY",
-            ProviderType.CUSTOM: "CUSTOM_API_KEY",  # Can be empty for providers that don't need auth
+            # Can be empty for providers that don't need auth
+            ProviderType.CUSTOM: "CUSTOM_API_KEY",
             ProviderType.DIAL: "DIAL_API_KEY",
+            ProviderType.MOONSHOT: "MOONSHOT_API_KEY",
+            ProviderType.GROQ: "GROQ_API_KEY",
+            ProviderType.PERPLEXITY: "PERPLEXITY_API_KEY",
         }
 
         env_var = key_mapping.get(provider_type)
@@ -255,7 +283,26 @@ class ModelProviderRegistry:
         Returns:
             List of model names that are both supported and allowed
         """
-        from utils.model_restrictions import get_restriction_service
+        # ---------------------------------------------------------------------------------
+        # NEW: Respect user-specified CUSTOM_MODEL_NAME environment variable
+        # ---------------------------------------------------------------------------------
+        # If the user has explicitly provided a CUSTOM_MODEL_NAME we should honour it
+        # as the highest-priority fallback *before* performing any automatic heuristics.
+        # This allows seamless use of arbitrary local models without having to modify
+        # the built-in configuration or JSON registry.
+        # ---------------------------------------------------------------------------------
+        custom_env_model = os.getenv("CUSTOM_MODEL_NAME", "").strip()
+        if custom_env_model:
+            # If a Custom provider is available and validates the model – great, return it.
+            # Otherwise, still return the env model so that downstream validation can occur
+            # (CustomProvider.validate_model_name will perform heuristics and may accept it
+            # even if it's unknown to the registry).
+            custom_provider = cls.get_provider(ProviderType.CUSTOM)
+            if custom_provider is None or custom_provider.validate_model_name(custom_env_model):
+                return custom_env_model
+
+        # Import here to avoid circular import
+        from tools.models import ToolModelCategory
 
         restriction_service = get_restriction_service()
 

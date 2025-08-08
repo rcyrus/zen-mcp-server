@@ -26,6 +26,10 @@ class ProviderType(Enum):
     OPENROUTER = "openrouter"
     CUSTOM = "custom"
     DIAL = "dial"
+    PERPLEXITY = "perplexity"
+    MOONSHOT = "moonshot"
+    GROQ = "groq"
+    VERTEX_AI = "vertex_ai"
 
 
 class TemperatureConstraint(ABC):

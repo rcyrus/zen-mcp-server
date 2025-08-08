@@ -58,7 +58,7 @@ class XAIModelProvider(OpenAICompatibleProvider):
             supports_temperature=True,
             temperature_constraint=create_temperature_constraint("range"),
             description="GROK-3 (131K context) - Advanced reasoning model from X.AI, excellent for complex analysis",
-            aliases=["grok3"],
+            aliases=["grok", "grok3"],
         ),
         "grok-3-fast": ModelCapabilities(
             provider=ProviderType.XAI,
@@ -77,6 +77,25 @@ class XAIModelProvider(OpenAICompatibleProvider):
             temperature_constraint=create_temperature_constraint("range"),
             description="GROK-3 Fast (131K context) - Higher performance variant, faster processing but more expensive",
             aliases=["grok3fast", "grokfast", "grok3-fast"],
+        ),
+        "grok-4": ModelCapabilities(
+            provider=ProviderType.XAI,
+            model_name="grok-4",
+            friendly_name="X.AI (Grok 4)",
+            context_window=256_000,  # 256K tokens (API version)
+            max_output_tokens=256000,
+            supports_extended_thinking=True,  # Advanced reasoning capabilities
+            supports_system_prompts=True,
+            supports_streaming=True,
+            supports_function_calling=True,
+            supports_json_mode=True,  # Grok 4 supports JSON mode
+            supports_images=True,  # Multimodal capabilities
+            max_image_size_mb=20.0,
+            supports_temperature=True,
+            temperature_constraint=create_temperature_constraint("range"),
+            description="GROK-4 (256K context) - Latest generation model with enhanced reasoning, multimodal capabilities, and 100x more training data than Grok 2",
+            aliases=["grok4"],
+            max_thinking_tokens=32768,  # Extended reasoning support
         ),
     }
 
@@ -151,11 +170,11 @@ class XAIModelProvider(OpenAICompatibleProvider):
 
     def supports_thinking_mode(self, model_name: str) -> bool:
         """Check if the model supports extended thinking mode."""
-        resolved_name = self._resolve_model_name(model_name)
-        capabilities = self.SUPPORTED_MODELS.get(resolved_name)
-        if capabilities:
+        try:
+            capabilities = self.get_capabilities(model_name)
             return capabilities.supports_extended_thinking
-        return False
+        except ValueError:
+            return False
 
     def get_preferred_model(self, category: "ToolModelCategory", allowed_models: list[str]) -> Optional[str]:
         """Get XAI's preferred model for a given category from allowed models.
