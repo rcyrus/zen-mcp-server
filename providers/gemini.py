@@ -2,7 +2,6 @@
 
 import base64
 import logging
-import os
 import time
 from typing import Optional
 
@@ -189,7 +188,7 @@ class GeminiModelProvider(ModelProvider):
             logger.warning(f"Model {resolved_name} does not support images, ignoring {len(images)} image(s)")
 
         # Create contents structure
-        contents = [{"parts": parts}]
+        contents = self._build_contents(parts)
 
         # Prepare generation config
         generation_config = types.GenerateContentConfig(
@@ -229,19 +228,7 @@ class GeminiModelProvider(ModelProvider):
                 # Extract usage information if available
                 usage = self._extract_usage(response)
 
-                return ModelResponse(
-                    content=response.text,
-                    usage=usage,
-                    model_name=resolved_name,
-                    friendly_name="Gemini",
-                    provider=ProviderType.GOOGLE,
-                    metadata={
-                        "thinking_mode": thinking_mode if capabilities.supports_extended_thinking else None,
-                        "finish_reason": (
-                            getattr(response.candidates[0], "finish_reason", "STOP") if response.candidates else "STOP"
-                        ),
-                    },
-                )
+                return self._build_response(response, resolved_name, thinking_mode, capabilities, usage)
 
             except Exception as e:
                 last_exception = e
@@ -437,31 +424,71 @@ class GeminiModelProvider(ModelProvider):
 
         return any(indicator in error_str for indicator in retryable_indicators)
 
+    def _build_contents(self, parts: list[dict]) -> list[dict]:
+        """Build contents structure for API request.
+
+        Template method that subclasses can override to customize the content structure.
+        For example, Vertex AI requires a "role" field while direct Gemini API does not.
+
+        Args:
+            parts: List of content parts (text, images, etc.)
+
+        Returns:
+            List of content dictionaries structured for the specific API
+        """
+        return [{"parts": parts}]
+
+    def _build_response(
+        self, response, model_name: str, thinking_mode: str, capabilities, usage: dict
+    ) -> ModelResponse:
+        """Build response object from API response.
+
+        Template method that subclasses can override to customize response formatting.
+        Subclasses can modify metadata, provider information, or other response details.
+
+        Args:
+            response: Raw API response object
+            model_name: Name of the model used
+            thinking_mode: Thinking mode configuration
+            capabilities: Model capabilities object
+            usage: Token usage information
+
+        Returns:
+            ModelResponse object with standardized format
+        """
+        return ModelResponse(
+            content=response.text,
+            usage=usage,
+            model_name=model_name,
+            friendly_name="Gemini",
+            provider=ProviderType.GOOGLE,
+            metadata={
+                "thinking_mode": thinking_mode if capabilities.supports_extended_thinking else None,
+                "finish_reason": (
+                    getattr(response.candidates[0], "finish_reason", "STOP") if response.candidates else "STOP"
+                ),
+            },
+        )
+
     def _process_image(self, image_path: str) -> Optional[dict]:
         """Process an image for Gemini API."""
         try:
-            if image_path.startswith("data:image/"):
-                # Handle data URL: data:image/png;base64,iVBORw0...
-                header, data = image_path.split(",", 1)
-                mime_type = header.split(";")[0].split(":")[1]
+            # Use base class validation
+            image_bytes, mime_type = self.validate_image(image_path)
+
+            # For data URLs, extract the base64 data directly
+            if image_path.startswith("data:"):
+                # Extract base64 data from data URL
+                _, data = image_path.split(",", 1)
                 return {"inline_data": {"mime_type": mime_type, "data": data}}
             else:
-                # Handle file path
-                from utils.file_types import get_image_mime_type
-
-                if not os.path.exists(image_path):
-                    logger.warning(f"Image file not found: {image_path}")
-                    return None
-
-                # Detect MIME type from file extension using centralized mappings
-                ext = os.path.splitext(image_path)[1].lower()
-                mime_type = get_image_mime_type(ext)
-
-                # Read and encode the image
-                with open(image_path, "rb") as f:
-                    image_data = base64.b64encode(f.read()).decode()
-
+                # For file paths, encode the bytes
+                image_data = base64.b64encode(image_bytes).decode()
                 return {"inline_data": {"mime_type": mime_type, "data": image_data}}
+
+        except ValueError as e:
+            logger.warning(str(e))
+            return None
         except Exception as e:
             logger.error(f"Error processing image {image_path}: {e}")
             return None

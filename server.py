@@ -36,7 +36,7 @@ try:
     # Load environment variables from .env file in the script's directory
     # This ensures .env is loaded regardless of the current working directory
     script_dir = Path(__file__).parent
-    env_file = script_dir / ".env"
+    env_file = ".env"
     load_dotenv(dotenv_path=env_file)
 except ImportError:
     # dotenv not available - this is fine, environment variables can still be passed directly
@@ -74,6 +74,7 @@ from tools import (  # noqa: E402
     PlannerTool,
     PrecommitTool,
     RefactorTool,
+    ResearchTool,
     SecauditTool,
     TestGenTool,
     ThinkDeepTool,
@@ -162,7 +163,6 @@ except Exception as e:
     print(f"Warning: Could not set up file logging: {e}", file=sys.stderr)
 
 logger = logging.getLogger(__name__)
-
 
 # Create the MCP server instance with a unique name identifier
 # This name is used by MCP clients to identify and connect to this specific server
@@ -264,18 +264,24 @@ def filter_disabled_tools(all_tools: dict[str, Any]) -> dict[str, Any]:
 # Tools are instantiated once and reused across requests (stateless design)
 TOOLS = {
     "chat": ChatTool(),  # Interactive development chat and brainstorming
-    "thinkdeep": ThinkDeepTool(),  # Step-by-step deep thinking workflow with expert analysis
+    # Step-by-step deep thinking workflow with expert analysis
+    "thinkdeep": ThinkDeepTool(),
     "planner": PlannerTool(),  # Interactive sequential planner using workflow architecture
-    "consensus": ConsensusTool(),  # Step-by-step consensus workflow with multi-model analysis
-    "codereview": CodeReviewTool(),  # Comprehensive step-by-step code review workflow with expert analysis
+    # Step-by-step consensus workflow with multi-model analysis
+    "consensus": ConsensusTool(),
+    # Comprehensive step-by-step code review workflow with expert analysis
+    "codereview": CodeReviewTool(),
     "precommit": PrecommitTool(),  # Step-by-step pre-commit validation workflow
     "debug": DebugIssueTool(),  # Root cause analysis and debugging assistance
-    "secaudit": SecauditTool(),  # Comprehensive security audit with OWASP Top 10 and compliance coverage
+    # Comprehensive security audit with OWASP Top 10 and compliance coverage
+    "secaudit": SecauditTool(),
     "docgen": DocgenTool(),  # Step-by-step documentation generation with complexity analysis
     "analyze": AnalyzeTool(),  # General-purpose file and code analysis
-    "refactor": RefactorTool(),  # Step-by-step refactoring analysis workflow with expert validation
+    # Step-by-step refactoring analysis workflow with expert validation
+    "refactor": RefactorTool(),
     "tracer": TracerTool(),  # Static call path prediction and control flow analysis
     "testgen": TestGenTool(),  # Step-by-step test generation workflow with expert validation
+    "research": ResearchTool(),  # Fast web research using Perplexity Sonar for technical information
     "challenge": ChallengeTool(),  # Critical challenge prompt wrapper to avoid automatic agreement
     "listmodels": ListModelsTool(),  # List all available AI models by provider
     "version": VersionTool(),  # Display server version and system information
@@ -349,6 +355,11 @@ PROMPT_TEMPLATES = {
         "description": "Generate comprehensive tests",
         "template": "Generate comprehensive tests with {model}",
     },
+    "research": {
+        "name": "research",
+        "description": "Conduct in-depth research on a specific topic",
+        "template": "Conduct in-depth research on {topic} with {model}. User request: {user_query}. Provide a direct answer, key details, practical examples, and cite your sources.",
+    },
     "challenge": {
         "name": "challenge",
         "description": "Challenge a statement critically without automatic agreement",
@@ -379,7 +390,15 @@ def configure_providers():
     """
     # Log environment variable status for debugging
     logger.debug("Checking environment variables for API keys...")
-    api_keys_to_check = ["OPENAI_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY", "XAI_API_KEY", "CUSTOM_API_URL"]
+    api_keys_to_check = [
+        "OPENAI_API_KEY",
+        "OPENROUTER_API_KEY",
+        "GEMINI_API_KEY",
+        "XAI_API_KEY",
+        "MOONSHOT_API_KEY",
+        "PERPLEXITY_API_KEY",
+        "CUSTOM_API_URL",
+    ]
     for key in api_keys_to_check:
         value = os.getenv(key)
         logger.debug(f"  {key}: {'[PRESENT]' if value else '[MISSING]'}")
@@ -388,8 +407,12 @@ def configure_providers():
     from providers.custom import CustomProvider
     from providers.dial import DIALModelProvider
     from providers.gemini import GeminiModelProvider
+    from providers.groq import GroqProvider
+    from providers.moonshot import MoonshotProvider
     from providers.openai_provider import OpenAIModelProvider
     from providers.openrouter import OpenRouterProvider
+    from providers.perplexity_provider import PerplexityProvider
+    from providers.vertex_ai import VertexAIProvider
     from providers.xai import XAIModelProvider
     from utils.model_restrictions import get_restriction_service
 
@@ -425,12 +448,41 @@ def configure_providers():
         has_native_apis = True
         logger.info("X.AI API key found - GROK models available")
 
+    # Check for Moonshot API key
+    moonshot_key = os.getenv("MOONSHOT_API_KEY")
+    if moonshot_key and moonshot_key != "your_moonshot_api_key_here":
+        valid_providers.append("Moonshot (Kimi)")
+        has_native_apis = True
+        logger.info("Moonshot API key found - Kimi models available")
+
+    # Check for Groq API key
+    groq_key = os.getenv("GROQ_API_KEY")
+    if groq_key and groq_key != "your_groq_api_key_here":
+        valid_providers.append("Groq (Ultra-fast)")
+        has_native_apis = True
+        logger.info("Groq API key found - Ultra-fast inference models available")
+
     # Check for DIAL API key
     dial_key = os.getenv("DIAL_API_KEY")
     if dial_key and dial_key != "your_dial_api_key_here":
         valid_providers.append("DIAL")
         has_native_apis = True
         logger.info("DIAL API key found - DIAL models available")
+
+    # Check for Perplexity API key
+    perplexity_key = os.getenv("PERPLEXITY_API_KEY")
+    if perplexity_key and perplexity_key != "your_perplexity_api_key_here":
+        valid_providers.append("Perplexity")
+        has_native_apis = True
+        logger.info("Perplexity API key found - Sonar models available")
+
+    # Check for Vertex AI configuration
+    vertex_project_id = os.getenv("VERTEX_PROJECT_ID")
+    if vertex_project_id:
+        vertex_region = os.getenv("VERTEX_REGION", "us-central1")
+        valid_providers.append(f"Vertex AI (Project: {vertex_project_id})")
+        has_native_apis = True
+        logger.info(f"Vertex AI project found - Vertex AI Gemini models available in {vertex_region}")
 
     # Check for OpenRouter API key
     openrouter_key = os.getenv("OPENROUTER_API_KEY")
@@ -452,7 +504,8 @@ def configure_providers():
         # - Some providers (vLLM, LM Studio, enterprise APIs) require authentication
         # - Others (Ollama) work without authentication (empty key)
         # - DO NOT remove this variable - it's needed for provider factory function
-        custom_key = os.getenv("CUSTOM_API_KEY", "")  # Default to empty (Ollama doesn't need auth)
+        # Default to empty (Ollama doesn't need auth)
+        custom_key = os.getenv("CUSTOM_API_KEY", "")
         custom_model = os.getenv("CUSTOM_MODEL_NAME", "llama3.2")
         valid_providers.append(f"Custom API ({custom_url})")
         has_custom = True
@@ -471,8 +524,16 @@ def configure_providers():
             ModelProviderRegistry.register_provider(ProviderType.OPENAI, OpenAIModelProvider)
         if xai_key and xai_key != "your_xai_api_key_here":
             ModelProviderRegistry.register_provider(ProviderType.XAI, XAIModelProvider)
+        if moonshot_key and moonshot_key != "your_moonshot_api_key_here":
+            ModelProviderRegistry.register_provider(ProviderType.MOONSHOT, MoonshotProvider)
+        if groq_key and groq_key != "your_groq_api_key_here":
+            ModelProviderRegistry.register_provider(ProviderType.GROQ, GroqProvider)
         if dial_key and dial_key != "your_dial_api_key_here":
             ModelProviderRegistry.register_provider(ProviderType.DIAL, DIALModelProvider)
+        if perplexity_key and perplexity_key != "your_perplexity_api_key_here":
+            ModelProviderRegistry.register_provider(ProviderType.PERPLEXITY, PerplexityProvider)
+        if vertex_project_id:
+            ModelProviderRegistry.register_provider(ProviderType.VERTEX_AI, VertexAIProvider)
 
     # 2. Custom provider second (for local/private models)
     if has_custom:
@@ -480,7 +541,8 @@ def configure_providers():
         def custom_provider_factory(api_key=None):
             # api_key is CUSTOM_API_KEY (can be empty for Ollama), base_url from CUSTOM_API_URL
             base_url = os.getenv("CUSTOM_API_URL", "")
-            return CustomProvider(api_key=api_key or "", base_url=base_url)  # Use provided API key or empty string
+            # Use provided API key or empty string
+            return CustomProvider(api_key=api_key or "", base_url=base_url)
 
         ModelProviderRegistry.register_provider(ProviderType.CUSTOM, custom_provider_factory)
 
@@ -495,7 +557,10 @@ def configure_providers():
             "- GEMINI_API_KEY for Gemini models\n"
             "- OPENAI_API_KEY for OpenAI o3 model\n"
             "- XAI_API_KEY for X.AI GROK models\n"
+            "- MOONSHOT_API_KEY for Moonshot Kimi models\n"
             "- DIAL_API_KEY for DIAL models\n"
+            "- VERTEX_PROJECT_ID for Vertex AI Gemini models\n"
+            "- PERPLEXITY_API_KEY for Perplexity Sonar models\n"
             "- OPENROUTER_API_KEY for OpenRouter (multiple models)\n"
             "- CUSTOM_API_URL for local models (Ollama, vLLM, etc.)"
         )
@@ -589,27 +654,6 @@ async def handle_list_tools() -> list[Tool]:
         List of Tool objects representing all available tools
     """
     logger.debug("MCP client requested tool list")
-
-    # Try to log client info if available (this happens early in the handshake)
-    try:
-        from utils.client_info import format_client_info, get_client_info_from_context
-
-        client_info = get_client_info_from_context(server)
-        if client_info:
-            formatted = format_client_info(client_info)
-            logger.info(f"MCP Client Connected: {formatted}")
-
-            # Log to activity file as well
-            try:
-                mcp_activity_logger = logging.getLogger("mcp_activity")
-                friendly_name = client_info.get("friendly_name", "Claude")
-                raw_name = client_info.get("name", "Unknown")
-                version = client_info.get("version", "Unknown")
-                mcp_activity_logger.info(f"MCP_CLIENT_INFO: {friendly_name} (raw={raw_name} v{version})")
-            except Exception:
-                pass
-    except Exception as e:
-        logger.debug(f"Could not log client info during list_tools: {e}")
     tools = []
 
     # Add all registered AI-powered tools from the TOOLS registry
@@ -620,8 +664,8 @@ async def handle_list_tools() -> list[Tool]:
 
         tools.append(
             Tool(
-                name=tool.name,
-                description=tool.description,
+                name=tool.get_name(),
+                description=tool.get_description(),
                 inputSchema=tool.get_input_schema(),
                 annotations=tool_annotations,
             )
@@ -1098,7 +1142,8 @@ async def reconstruct_thread_context(arguments: dict[str, Any]) -> dict[str, Any
     # History has already consumed some of the content budget
     remaining_tokens = token_allocation.content_tokens - conversation_tokens
     enhanced_arguments["_remaining_tokens"] = max(0, remaining_tokens)  # Ensure non-negative
-    enhanced_arguments["_model_context"] = model_context  # Pass context for use in tools
+    # Pass context for use in tools
+    enhanced_arguments["_model_context"] = model_context
 
     logger.debug("[CONVERSATION_DEBUG] Token budget calculation:")
     logger.debug(f"[CONVERSATION_DEBUG]   Model: {model_context.model_name}")
@@ -1288,6 +1333,19 @@ async def handle_get_prompt(name: str, arguments: dict[str, Any] = None) -> GetP
     )
 
 
+@server.list_resources()
+async def handle_list_resources() -> list[dict]:
+    """Return available auxiliary resources (files, images, etc.) for MCP clients.
+
+    Current implementation returns an empty list to satisfy the MCP protocol
+    and prevent the client from waiting indefinitely for a response. This can
+    be extended in the future to expose downloadable reference docs or other
+    assets.
+    """
+    logger.debug("MCP client requested resource list – none available, returning []")
+    return []
+
+
 async def main():
     """
     Main entry point for the MCP server.
@@ -1305,9 +1363,6 @@ async def main():
     # Log startup message
     logger.info("Zen MCP Server starting up...")
     logger.info(f"Log level: {log_level}")
-
-    # Note: MCP client info will be logged during the protocol handshake
-    # (when handle_list_tools is called)
 
     # Log current model mode
     from config import IS_AUTO_MODE

@@ -1,6 +1,6 @@
 """Base class for OpenAI-compatible API providers."""
 
-import base64
+import copy
 import ipaddress
 import logging
 import os
@@ -220,10 +220,20 @@ class OpenAICompatibleProvider(ModelProvider):
 
                 # Create httpx client with minimal config to avoid proxy conflicts
                 # Note: proxies parameter was removed in httpx 0.28.0
-                http_client = httpx.Client(
-                    timeout=timeout_config,
-                    follow_redirects=True,
-                )
+                # Check for test transport injection
+                if hasattr(self, "_test_transport"):
+                    # Use custom transport for testing (HTTP recording/replay)
+                    http_client = httpx.Client(
+                        transport=self._test_transport,
+                        timeout=timeout_config,
+                        follow_redirects=True,
+                    )
+                else:
+                    # Normal production client
+                    http_client = httpx.Client(
+                        timeout=timeout_config,
+                        follow_redirects=True,
+                    )
 
                 # Keep client initialization minimal to avoid proxy parameter conflicts
                 client_kwargs = {
@@ -264,6 +274,63 @@ class OpenAICompatibleProvider(ModelProvider):
 
         return self._client
 
+    def _sanitize_for_logging(self, params: dict) -> dict:
+        """Sanitize sensitive data from parameters before logging.
+
+        Args:
+            params: Dictionary of API parameters
+
+        Returns:
+            dict: Sanitized copy of parameters safe for logging
+        """
+        sanitized = copy.deepcopy(params)
+
+        # Sanitize messages content
+        if "input" in sanitized:
+            for msg in sanitized.get("input", []):
+                if isinstance(msg, dict) and "content" in msg:
+                    for content_item in msg.get("content", []):
+                        if isinstance(content_item, dict) and "text" in content_item:
+                            # Truncate long text and add ellipsis
+                            text = content_item["text"]
+                            if len(text) > 100:
+                                content_item["text"] = text[:100] + "... [truncated]"
+
+        # Remove any API keys that might be in headers/auth
+        sanitized.pop("api_key", None)
+        sanitized.pop("authorization", None)
+
+        return sanitized
+
+    def _safe_extract_output_text(self, response) -> str:
+        """Safely extract output_text from o3-pro response with validation.
+
+        Args:
+            response: Response object from OpenAI SDK
+
+        Returns:
+            str: The output text content
+
+        Raises:
+            ValueError: If output_text is missing, None, or not a string
+        """
+        logging.debug(f"Response object type: {type(response)}")
+        logging.debug(f"Response attributes: {dir(response)}")
+
+        if not hasattr(response, "output_text"):
+            raise ValueError(f"o3-pro response missing output_text field. Response type: {type(response).__name__}")
+
+        content = response.output_text
+        logging.debug(f"Extracted output_text: '{content}' (type: {type(content)})")
+
+        if content is None:
+            raise ValueError("o3-pro returned None for output_text")
+
+        if not isinstance(content, str):
+            raise ValueError(f"o3-pro output_text is not a string. Got type: {type(content).__name__}")
+
+        return content
+
     def _generate_with_responses_endpoint(
         self,
         model_name: str,
@@ -272,7 +339,7 @@ class OpenAICompatibleProvider(ModelProvider):
         max_output_tokens: Optional[int] = None,
         **kwargs,
     ) -> ModelResponse:
-        """Generate content using the /v1/responses endpoint for o3-pro via OpenAI library."""
+        """Generate content using the /v1/responses endpoint for OpenAI models that require it."""
         # Convert messages to the correct format for responses endpoint
         input_messages = []
 
@@ -281,8 +348,8 @@ class OpenAICompatibleProvider(ModelProvider):
             content = message.get("content", "")
 
             if role == "system":
-                # For o3-pro, system messages should be handled carefully to avoid policy violations
-                # Instead of prefixing with "System:", we'll include the system content naturally
+                # For models using responses endpoint, system messages should be handled carefully
+                # Include the system content as a user message to avoid policy violations
                 input_messages.append({"role": "user", "content": [{"type": "input_text", "text": content}]})
             elif role == "user":
                 input_messages.append({"role": "user", "content": [{"type": "input_text", "text": content}]})
@@ -311,42 +378,38 @@ class OpenAICompatibleProvider(ModelProvider):
         last_exception = None
 
         for attempt in range(max_retries):
-            try:  # Log the exact payload being sent for debugging
+            try:  # Log sanitized payload for debugging
                 import json
 
+                sanitized_params = self._sanitize_for_logging(completion_params)
                 logging.info(
-                    f"o3-pro API request payload: {json.dumps(completion_params, indent=2, ensure_ascii=False)}"
+                    f"o3-pro API request (sanitized): {json.dumps(sanitized_params, indent=2, ensure_ascii=False)}"
                 )
 
                 # Use OpenAI client's responses endpoint
                 response = self.client.responses.create(**completion_params)
 
-                # Extract content and usage from responses endpoint format
-                # The response format is different for responses endpoint
-                content = ""
-                if hasattr(response, "output") and response.output:
-                    if hasattr(response.output, "content") and response.output.content:
-                        # Look for output_text in content
-                        for content_item in response.output.content:
-                            if hasattr(content_item, "type") and content_item.type == "output_text":
-                                content = content_item.text
-                                break
-                    elif hasattr(response.output, "text"):
-                        content = response.output.text
+                # Extract content from responses endpoint format
+                # Use validation helper to safely extract output_text
+                content = self._safe_extract_output_text(response)
 
                 # Try to extract usage information
                 usage = None
-                if hasattr(response, "usage"):
-                    usage = self._extract_usage(response)
-                elif hasattr(response, "input_tokens") and hasattr(response, "output_tokens"):
-                    # Safely extract token counts with None handling
-                    input_tokens = getattr(response, "input_tokens", 0) or 0
-                    output_tokens = getattr(response, "output_tokens", 0) or 0
+                if hasattr(response, "usage") and response.usage:
+                    # For responses endpoint, usage object has different structure
+                    input_tokens = getattr(response.usage, "input_tokens", 0) or 0
+                    output_tokens = getattr(response.usage, "output_tokens", 0) or 0
+                    total_tokens = getattr(response.usage, "total_tokens", 0) or 0
                     usage = {
                         "input_tokens": input_tokens,
                         "output_tokens": output_tokens,
-                        "total_tokens": input_tokens + output_tokens,
+                        "total_tokens": total_tokens or (input_tokens + output_tokens),
                     }
+
+                    if hasattr(response.usage, "output_tokens_details"):
+                        output_details = response.usage.output_tokens_details
+                        if hasattr(output_details, "reasoning_tokens"):
+                            usage["reasoning_tokens"] = getattr(output_details, "reasoning_tokens", 0) or 0
 
                 return ModelResponse(
                     content=content,
@@ -371,7 +434,7 @@ class OpenAICompatibleProvider(ModelProvider):
                 if is_retryable and attempt < max_retries - 1:
                     delay = retry_delays[attempt]
                     logging.warning(
-                        f"Retryable error for o3-pro responses endpoint, attempt {attempt + 1}/{max_retries}: {str(e)}. Retrying in {delay}s..."
+                        f"Retryable error for {model_name} responses endpoint, attempt {attempt + 1}/{max_retries}: {str(e)}. Retrying in {delay}s..."
                     )
                     time.sleep(delay)
                 else:
@@ -379,7 +442,7 @@ class OpenAICompatibleProvider(ModelProvider):
 
         # If we get here, all retries failed
         actual_attempts = attempt + 1  # Convert from 0-based index to human-readable count
-        error_msg = f"o3-pro responses endpoint error after {actual_attempts} attempt{'s' if actual_attempts > 1 else ''}: {str(last_exception)}"
+        error_msg = f"{model_name} responses endpoint error after {actual_attempts} attempt{'s' if actual_attempts > 1 else ''}: {str(last_exception)}"
         logging.error(error_msg)
         raise RuntimeError(error_msg) from last_exception
 
@@ -480,9 +543,9 @@ class OpenAICompatibleProvider(ModelProvider):
                     continue  # Skip unsupported parameters for reasoning models
                 completion_params[key] = value
 
-        # Check if this is o3-pro and needs the responses endpoint
-        if resolved_model == "o3-pro-2025-06-10":
-            # This model requires the /v1/responses endpoint
+        # Check if this is a model that requires the responses endpoint
+        if resolved_model in {"o3-pro-2025-06-10", "codex-mini-latest"}:
+            # These models require the /v1/responses endpoint
             # If it fails, we should not fall back to chat/completions
             return self._generate_with_responses_endpoint(
                 model_name=resolved_model,
@@ -788,30 +851,29 @@ class OpenAICompatibleProvider(ModelProvider):
     def _process_image(self, image_path: str) -> Optional[dict]:
         """Process an image for OpenAI-compatible API."""
         try:
-            if image_path.startswith("data:image/"):
+            if image_path.startswith("data:"):
+                # Validate the data URL
+                self.validate_image(image_path)
                 # Handle data URL: data:image/png;base64,iVBORw0...
                 return {"type": "image_url", "image_url": {"url": image_path}}
             else:
-                # Handle file path
-                if not os.path.exists(image_path):
-                    logging.warning(f"Image file not found: {image_path}")
-                    return None
-
-                # Detect MIME type from file extension using centralized mappings
-                from utils.file_types import get_image_mime_type
-
-                ext = os.path.splitext(image_path)[1].lower()
-                mime_type = get_image_mime_type(ext)
-                logging.debug(f"Processing image '{image_path}' with extension '{ext}' as MIME type '{mime_type}'")
+                # Use base class validation
+                image_bytes, mime_type = self.validate_image(image_path)
 
                 # Read and encode the image
-                with open(image_path, "rb") as f:
-                    image_data = base64.b64encode(f.read()).decode()
+                import base64
+
+                image_data = base64.b64encode(image_bytes).decode()
+                logging.debug(f"Processing image '{image_path}' as MIME type '{mime_type}'")
 
                 # Create data URL for OpenAI API
                 data_url = f"data:{mime_type};base64,{image_data}"
 
                 return {"type": "image_url", "image_url": {"url": data_url}}
+
+        except ValueError as e:
+            logging.warning(str(e))
+            return None
         except Exception as e:
             logging.error(f"Error processing image {image_path}: {e}")
             return None

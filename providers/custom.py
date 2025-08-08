@@ -212,7 +212,8 @@ class CustomProvider(OpenAICompatibleProvider):
             # Try to resolve the clean name
             config = self._registry.resolve(clean_model_name)
             if config:
-                return self.validate_model_name(clean_model_name)  # Recursively validate clean name
+                # Recursively validate clean name
+                return self.validate_model_name(clean_model_name)
 
         # For unknown models (not in registry), only accept if they look like local models
         # This maintains backward compatibility for custom models not yet in the registry
@@ -301,9 +302,39 @@ class CustomProvider(OpenAICompatibleProvider):
                 # Only include custom models that this provider validates
                 if self.validate_model_name(model_name):
                     config = self._registry.resolve(model_name)
+                    # Skip built-in placeholder model when user supplies their own model via env var
+                    custom_env_model = os.getenv("CUSTOM_MODEL_NAME", "").strip()
+                    if custom_env_model and custom_env_model.lower() != "llama3.2" and model_name.lower() == "llama3.2":
+                        # Suppress noise: don't include default llama3.2 entry when it's not the chosen env model
+                        continue
                     if config and config.is_custom:
                         # Use ModelCapabilities directly from registry
                         configs[model_name] = config
+
+        # ---------------------------------------------------------------------
+        # NEW: Dynamically add model from CUSTOM_MODEL_NAME environment variable
+        # ---------------------------------------------------------------------
+        custom_env_model = os.getenv("CUSTOM_MODEL_NAME", "").strip()
+        if custom_env_model and custom_env_model not in configs:
+            # Add a generic capability set so that the model shows up in
+            # list_models() and can be selected by fallback logic even when it
+            # is not present in conf/custom_models.json.
+            logging.debug(f"Adding env-specified custom model '{custom_env_model}' to configurations")
+
+            configs[custom_env_model] = ModelCapabilities(
+                provider=ProviderType.CUSTOM,
+                model_name=custom_env_model,
+                friendly_name=f"{self.FRIENDLY_NAME} ({custom_env_model})",
+                context_window=32_768,
+                max_output_tokens=32_768,
+                supports_extended_thinking=False,
+                supports_system_prompts=True,
+                supports_streaming=True,
+                supports_function_calling=False,
+                supports_temperature=True,
+                temperature_constraint=RangeTemperatureConstraint(0.0, 2.0, 0.7),
+                is_custom=True,
+            )
 
         return configs
 
