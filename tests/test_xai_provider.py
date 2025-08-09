@@ -178,10 +178,14 @@ class TestXAIProvider:
 
         # grok-3 should be allowed
         assert provider.validate_model_name("grok-3") is True
-        assert provider.validate_model_name("grok") is True  # Shorthand for grok-3
 
-        # grok should be blocked (resolves to grok-4 which is not allowed)
-        assert provider.validate_model_name("grok") is False
+        # grok has special case: allowed when grok-3 is allowed but grok-4 is not
+        # This is intentional behavior - see xai.py lines 127-130
+        assert provider.validate_model_name("grok") is True
+
+        # grok4 should be blocked (grok-4 is not in allowed list)
+        assert provider.validate_model_name("grok4") is False
+
         # grok-3-fast should be blocked by restrictions
         assert provider.validate_model_name("grok-3-fast") is False
         assert provider.validate_model_name("grokfast") is False
@@ -332,7 +336,9 @@ class TestXAIProvider:
 
         # Call generate_content with alias 'grok'
         result = provider.generate_content(
-            prompt="Test prompt", model_name="grok", temperature=0.7  # This should be resolved to "grok-4"
+            prompt="Test prompt",
+            model_name="grok",
+            temperature=0.7,  # This should be resolved to "grok-4"
         )
 
         # Verify the API was called with the RESOLVED model name

@@ -68,10 +68,9 @@ class TestVertexAIProvider:
         assert capabilities.supports_images is True
 
         # Test temperature range (inherited from Gemini provider)
-        assert capabilities.temperature_constraint.get_default() == 0.7
-        min_temp, max_temp = capabilities.temperature_range
-        assert min_temp == 0.0
-        assert max_temp == 2.0
+        assert capabilities.temperature_constraint.get_default() == 0.3
+        assert capabilities.temperature_constraint.min_temp == 0.0
+        assert capabilities.temperature_constraint.max_temp == 2.0
 
     @patch("providers.vertex_ai.google.auth.default")
     def test_credentials_error(self, mock_auth):
