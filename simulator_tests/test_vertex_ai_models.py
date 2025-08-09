@@ -46,6 +46,9 @@ class VertexAIModelsTest(BaseSimulatorTest):
                 self.logger.info("  ℹ️  This test requires VERTEX_PROJECT_ID to be set in .env with a valid project ID")
                 return True  # Return True to indicate test is skipped, not failed
 
+            # Initialize for in-process tool calling
+            self.setUp()
+
             # Setup test files for later use
             self.setup_test_files()
 

@@ -9,11 +9,12 @@ Tests custom API endpoint functionality with Ollama-style local models, includin
 - Model alias resolution for local models
 """
 
+import os
 
-from .base_test import BaseSimulatorTest
+from .conversation_base_test import ConversationBaseTest
 
 
-class OllamaCustomUrlTest(BaseSimulatorTest):
+class OllamaCustomUrlTest(ConversationBaseTest):
     """Test Ollama custom URL functionality"""
 
     @property
@@ -24,23 +25,27 @@ class OllamaCustomUrlTest(BaseSimulatorTest):
     def test_description(self) -> str:
         return "Ollama custom URL endpoint functionality"
 
+    def call_mcp_tool(self, tool_name: str, params: dict) -> tuple:
+        """Call an MCP tool in-process to maintain conversation memory"""
+        response_text, continuation_id = self.call_mcp_tool_direct(tool_name, params)
+        return response_text, continuation_id
+
     def run_test(self) -> bool:
         """Test Ollama custom URL functionality"""
         try:
             self.logger.info("Test: Ollama custom URL functionality")
 
-            # Check if custom URL is configured
-            import os
+            # Check if CUSTOM_API_URL is configured
+            custom_api_url = os.getenv("CUSTOM_API_URL")
+            if not custom_api_url:
+                self.logger.warning("  ⚠️  CUSTOM_API_URL not configured - skipping Ollama custom URL test")
+                self.logger.info("     To enable this test, set CUSTOM_API_URL in your .env file")
+                self.logger.info("     Example: CUSTOM_API_URL=http://localhost:11434/v1")
+                # Return True to not fail the test suite when custom endpoint is not configured
+                return True
 
-            custom_url = os.environ.get("CUSTOM_API_URL")
-            if not custom_url:
-                self.logger.warning("CUSTOM_API_URL not set, skipping Ollama test")
-                self.logger.info("To enable this test, add to .env file:")
-                self.logger.info("CUSTOM_API_URL=http://localhost:11434/v1")
-                self.logger.info("CUSTOM_API_KEY=")
-                return True  # Skip gracefully
-
-            self.logger.info(f"Testing with custom URL: {custom_url}")
+            # Initialize for in-process tool calling
+            self.setUp()
 
             # Setup test files
             self.setup_test_files()

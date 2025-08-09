@@ -9,10 +9,10 @@ Tests that verify the system correctly falls back to OpenRouter when:
 """
 
 
-from .base_test import BaseSimulatorTest
+from .conversation_base_test import ConversationBaseTest
 
 
-class OpenRouterFallbackTest(BaseSimulatorTest):
+class OpenRouterFallbackTest(ConversationBaseTest):
     """Test OpenRouter fallback behavior when it's the only provider"""
 
     @property
@@ -23,28 +23,18 @@ class OpenRouterFallbackTest(BaseSimulatorTest):
     def test_description(self) -> str:
         return "OpenRouter fallback behavior when only provider"
 
+    def call_mcp_tool(self, tool_name: str, params: dict) -> tuple:
+        """Call an MCP tool in-process to maintain conversation memory"""
+        response_text, continuation_id = self.call_mcp_tool_direct(tool_name, params)
+        return response_text, continuation_id
+
     def run_test(self) -> bool:
         """Test OpenRouter fallback behavior"""
         try:
             self.logger.info("Test: OpenRouter fallback behavior when only provider available")
 
-            # Check if ONLY OpenRouter API key is configured (this is a fallback test)
-            import os
-
-            has_openrouter = bool(os.environ.get("OPENROUTER_API_KEY"))
-            has_gemini = bool(os.environ.get("GEMINI_API_KEY"))
-            has_openai = bool(os.environ.get("OPENAI_API_KEY"))
-
-            if not has_openrouter:
-                self.logger.info("  ⚠️  OpenRouter API key not configured - skipping test")
-                self.logger.info("  ℹ️  This test requires OPENROUTER_API_KEY to be set in .env")
-                return True  # Return True to indicate test is skipped, not failed
-
-            if has_gemini or has_openai:
-                self.logger.info("  ⚠️  Other API keys configured - this is not a fallback scenario")
-                self.logger.info("  ℹ️  This test requires ONLY OpenRouter to be configured (no Gemini/OpenAI keys)")
-                self.logger.info("  ℹ️  Current setup has multiple providers, so fallback behavior doesn't apply")
-                return True  # Return True to indicate test is skipped, not failed
+            # Initialize for in-process tool calling
+            self.setUp()
 
             # Setup test files
             self.setup_test_files()

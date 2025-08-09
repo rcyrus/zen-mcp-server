@@ -8,10 +8,10 @@ This test is specifically designed to catch content duplication bugs.
 
 import os
 
-from .base_test import BaseSimulatorTest
+from .conversation_base_test import ConversationBaseTest
 
 
-class ContentValidationTest(BaseSimulatorTest):
+class ContentValidationTest(ConversationBaseTest):
     """Test that tools don't duplicate file content in their responses"""
 
     @property
@@ -22,12 +22,20 @@ class ContentValidationTest(BaseSimulatorTest):
     def test_description(self) -> str:
         return "Content validation and duplicate detection"
 
+    def call_mcp_tool(self, tool_name: str, params: dict) -> tuple:
+        """Call an MCP tool in-process to maintain conversation memory"""
+        response_text, continuation_id = self.call_mcp_tool_direct(tool_name, params)
+        return response_text, continuation_id
+
     def run_test(self) -> bool:
         """Test that file processing system properly handles file deduplication"""
         try:
             self.logger.info("📄 Test: Content validation and file processing deduplication")
 
-            # Setup test files first
+            # Initialize for in-process tool calling
+            self.setUp()
+
+            # Setup test files
             self.setup_test_files()
 
             # Create a test file for validation

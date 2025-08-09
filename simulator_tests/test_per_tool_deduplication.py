@@ -29,6 +29,11 @@ class PerToolDeduplicationTest(ConversationBaseTest):
 
     # create_additional_test_file method now inherited from base class
 
+    def call_mcp_tool(self, tool_name: str, params: dict) -> tuple:
+        """Call an MCP tool in-process to maintain conversation memory"""
+        response_text, continuation_id = self.call_mcp_tool_direct(tool_name, params)
+        return response_text, continuation_id
+
     def run_test(self) -> bool:
         """Test file deduplication with realistic precommit/codereview workflow"""
         try:

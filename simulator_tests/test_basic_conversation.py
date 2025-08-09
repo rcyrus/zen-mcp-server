@@ -8,10 +8,10 @@ Tests basic conversation continuity with the chat tool, including:
 - Adding additional files to ongoing conversation
 """
 
-from .base_test import BaseSimulatorTest
+from .conversation_base_test import ConversationBaseTest
 
 
-class BasicConversationTest(BaseSimulatorTest):
+class BasicConversationTest(ConversationBaseTest):
     """Test basic conversation flow with chat tool"""
 
     @property
@@ -22,10 +22,18 @@ class BasicConversationTest(BaseSimulatorTest):
     def test_description(self) -> str:
         return "Basic conversation flow with chat tool"
 
+    def call_mcp_tool(self, tool_name: str, params: dict) -> tuple:
+        """Call an MCP tool in-process to maintain conversation memory"""
+        response_text, continuation_id = self.call_mcp_tool_direct(tool_name, params)
+        return response_text, continuation_id
+
     def run_test(self) -> bool:
         """Test basic conversation flow with chat tool"""
         try:
             self.logger.info("Test: Basic conversation flow")
+
+            # Initialize for in-process tool calling
+            self.setUp()
 
             # Setup test files
             self.setup_test_files()

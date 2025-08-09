@@ -9,11 +9,10 @@ Tests that verify OpenRouter functionality including:
 - Error handling when models are not available
 """
 
+from .conversation_base_test import ConversationBaseTest
 
-from .base_test import BaseSimulatorTest
 
-
-class OpenRouterModelsTest(BaseSimulatorTest):
+class OpenRouterModelsTest(ConversationBaseTest):
     """Test OpenRouter model functionality and alias mapping"""
 
     @property
@@ -23,6 +22,11 @@ class OpenRouterModelsTest(BaseSimulatorTest):
     @property
     def test_description(self) -> str:
         return "OpenRouter model functionality and alias mapping"
+
+    def call_mcp_tool(self, tool_name: str, params: dict) -> tuple:
+        """Call an MCP tool in-process to maintain conversation memory"""
+        response_text, continuation_id = self.call_mcp_tool_direct(tool_name, params)
+        return response_text, continuation_id
 
     def run_test(self) -> bool:
         """Test OpenRouter model functionality"""
@@ -38,6 +42,9 @@ class OpenRouterModelsTest(BaseSimulatorTest):
                 self.logger.info("  ⚠️  OpenRouter API key not configured - skipping test")
                 self.logger.info("  ℹ️  This test requires OPENROUTER_API_KEY to be set in .env")
                 return True  # Return True to indicate test is skipped, not failed
+
+            # Initialize for in-process tool calling
+            self.setUp()
 
             # Setup test files for later use
             self.setup_test_files()

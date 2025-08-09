@@ -6,10 +6,10 @@ Tests that thinking configuration is properly applied only to models that suppor
 and that Flash models work correctly without thinking config.
 """
 
-from .base_test import BaseSimulatorTest
+from .conversation_base_test import ConversationBaseTest
 
 
-class TestModelThinkingConfig(BaseSimulatorTest):
+class TestModelThinkingConfig(ConversationBaseTest):
     """Test model-specific thinking configuration behavior"""
 
     @property
@@ -19,6 +19,11 @@ class TestModelThinkingConfig(BaseSimulatorTest):
     @property
     def test_description(self) -> str:
         return "Model-specific thinking configuration behavior"
+
+    def call_mcp_tool(self, tool_name: str, params: dict) -> tuple:
+        """Call an MCP tool in-process to maintain conversation memory"""
+        response_text, continuation_id = self.call_mcp_tool_direct(tool_name, params)
+        return response_text, continuation_id
 
     def test_pro_model_with_thinking_config(self):
         """Test that Pro model uses thinking configuration"""
@@ -136,6 +141,9 @@ class TestModelThinkingConfig(BaseSimulatorTest):
     def run_test(self) -> bool:
         """Run all model thinking configuration tests"""
         self.logger.info(f" Test: {self.test_description}")
+
+        # Initialize for in-process tool calling
+        self.setUp()
 
         try:
             # Test Pro model with thinking config

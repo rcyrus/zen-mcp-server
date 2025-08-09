@@ -226,8 +226,11 @@ This happens every time a user tries to log in. The error occurs in the password
                 self.logger.error("Expected confidence_level='certain' in complete investigation")
                 return False
 
-            if complete_investigation.get("steps_taken") != 2:
-                self.logger.error("Expected steps_taken=2 in complete investigation")
+            steps_taken = complete_investigation.get("steps_taken", 0)
+            self.logger.debug(f"complete_investigation: {complete_investigation}")
+            self.logger.debug(f"steps_taken value: {steps_taken}")
+            if steps_taken != 2:
+                self.logger.error(f"Expected steps_taken=2 in complete investigation, got {steps_taken}")
                 return False
 
             # Verify next steps guidance

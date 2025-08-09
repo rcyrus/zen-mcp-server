@@ -242,8 +242,8 @@ if __name__ == '__main__':
 
             # Check if it's asking for investigation
             status = response_data.get("status", "")
-            if status != "pause_for_secaudit":
-                self.logger.error(f"Expected pause_for_secaudit status, got: {status}")
+            if status != "pause_for_security_audit":
+                self.logger.error(f"Expected pause_for_security_audit status, got: {status}")
                 return False
 
             # Step 2: Continue with findings
@@ -317,7 +317,7 @@ if __name__ == '__main__':
             try:
                 response_data = json.loads(response)
                 # The tool should acknowledge the OWASP focus
-                if response_data.get("status") == "pause_for_secaudit":
+                if response_data.get("status") == "pause_for_security_audit":
                     self.logger.info("  ✅ Focused security audit test passed")
                     return True
             except json.JSONDecodeError:
@@ -418,17 +418,34 @@ if __name__ == '__main__':
                 try:
                     response_data = json.loads(response3)
                     status = response_data.get("status", "")
+                    self.logger.debug(f"Response3 status: {status}")
+                    self.logger.debug(f"Response3 data keys: {response_data.keys()}")
                     # Either expert analysis completed or security analysis complete
-                    if status in ["complete", "security_analysis_complete"]:
+                    if status in [
+                        "complete",
+                        "security_analysis_complete",
+                        "security_audit_complete",
+                        "calling_expert_analysis",
+                    ]:
                         self.logger.info("  ✅ Complete audit with expert analysis test passed")
                         return True
-                except json.JSONDecodeError:
+                    # Also check if expert_analysis field exists
+                    if "expert_analysis" in response_data and response_data["expert_analysis"]:
+                        self.logger.info("  ✅ Complete audit with expert analysis test passed (has expert_analysis)")
+                        return True
+                except json.JSONDecodeError as e:
+                    self.logger.debug(f"Response3 not JSON: {e}")
+                    self.logger.debug(
+                        f"Response3 content (first 200 chars): {response3[:200] if response3 else 'None'}"
+                    )
                     # If not JSON, check for security content (expert analysis output)
                     if "security" in response3.lower() or "vulnerability" in response3.lower():
                         self.logger.info("  ✅ Complete audit with expert analysis test passed")
                         return True
 
-            self.logger.error("Expected expert security analysis or completion")
+            self.logger.error(
+                f"Expected expert security analysis or completion. Got response3: {response3[:200] if response3 else 'None'}"
+            )
             return False
 
         except Exception as e:

@@ -5,10 +5,10 @@ Test to validate line number handling across different tools
 import json
 import os
 
-from .base_test import BaseSimulatorTest
+from .conversation_base_test import ConversationBaseTest
 
 
-class LineNumberValidationTest(BaseSimulatorTest):
+class LineNumberValidationTest(ConversationBaseTest):
     """Test that validates correct line number handling in chat, analyze, and refactor tools"""
 
     @property
@@ -19,10 +19,18 @@ class LineNumberValidationTest(BaseSimulatorTest):
     def test_description(self) -> str:
         return "Line number handling validation across tools"
 
+    def call_mcp_tool(self, tool_name: str, params: dict) -> tuple:
+        """Call an MCP tool in-process to maintain conversation memory"""
+        response_text, continuation_id = self.call_mcp_tool_direct(tool_name, params)
+        return response_text, continuation_id
+
     def run_test(self) -> bool:
         """Test line number handling in different tools"""
         try:
             self.logger.info("Test: Line number handling validation")
+
+            # Initialize for in-process tool calling
+            self.setUp()
 
             # Setup test files
             self.setup_test_files()

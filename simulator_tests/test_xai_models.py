@@ -9,7 +9,6 @@ Tests that verify X.AI GROK functionality including:
 - API integration and response validation
 """
 
-
 from .base_test import BaseSimulatorTest
 
 
@@ -39,6 +38,9 @@ class XAIModelsTest(BaseSimulatorTest):
                 self.logger.info("  ⚠️  X.AI API key not configured or empty - skipping test")
                 self.logger.info("  ℹ️  This test requires XAI_API_KEY to be set in .env with a valid key")
                 return True  # Return True to indicate test is skipped, not failed
+
+            # Initialize for in-process tool calling
+            self.setUp()
 
             # Setup test files for later use
             self.setup_test_files()
