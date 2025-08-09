@@ -306,6 +306,15 @@ class ThinkDeepTool(WorkflowTool):
         """Message for completion without expert analysis."""
         return "Deep thinking analysis complete with certain confidence. Proceed with implementation based on the analysis."
 
+    def should_include_files_in_expert_prompt(self) -> bool:
+        """Include relevant files in expert analysis prompts for reliability.
+
+        ThinkDeep validations rely on expert analysis having full context when
+        the workflow completes. Providing file content here prevents the expert
+        model from requesting files (e.g., returning 'files_required_to_continue').
+        """
+        return True
+
     def customize_expert_analysis_prompt(self, base_prompt: str, request, file_content: str = "") -> str:
         """
         Customize the expert analysis prompt for deep thinking validation

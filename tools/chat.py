@@ -18,6 +18,9 @@ from systemprompts import CHAT_PROMPT
 from tools.shared.base_models import ToolRequest
 
 from .simple.base import SimpleTool
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Field descriptions matching the original Chat tool exactly
 CHAT_FIELD_DESCRIPTIONS = {
@@ -199,6 +202,18 @@ class ChatTool(SimpleTool):
         This implementation matches the original Chat tool exactly while using
         SimpleTool convenience methods for cleaner code.
         """
+        try:
+            logger.debug(
+                "[CHAT] Preparing prompt | continuation_id=%s | model=%s | thinking_mode=%s | files=%d | images=%d",
+                getattr(request, "continuation_id", None),
+                getattr(request, "model", None),
+                getattr(request, "thinking_mode", None),
+                len(getattr(request, "files", []) or []),
+                len(getattr(request, "images", []) or []),
+            )
+        except Exception:
+            # Logging is non-critical; never block
+            pass
         # Use SimpleTool's Chat-style prompt preparation
         return self.prepare_chat_style_prompt(request)
 
@@ -208,7 +223,8 @@ class ChatTool(SimpleTool):
         """
         return (
             f"{response}\n\n---\n\nAGENT'S TURN: Evaluate this perspective alongside your analysis to "
-            "form a comprehensive solution and continue with the user's request and task at hand."
+            "form a comprehensive solution and continue with the user's request and task at hand. "
+            "Use the appropriate tools if needed."
         )
 
     def get_websearch_guidance(self) -> str:

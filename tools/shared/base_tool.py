@@ -244,8 +244,13 @@ class BaseTool(ABC):
         """
         from providers.registry import ModelProviderRegistry
 
-        # Get models from enabled providers only (those with valid API keys)
-        all_models = ModelProviderRegistry.get_available_model_names()
+        # In auto mode, present full provider model options (unrestricted)
+        if self.is_effective_auto_mode():
+            available = ModelProviderRegistry.get_available_models(respect_restrictions=False)
+            all_models = list(available.keys())
+        else:
+            # Get models from enabled providers only (those with valid API keys), respecting restrictions
+            all_models = ModelProviderRegistry.get_available_model_names()
 
         # Add OpenRouter models if OpenRouter is configured
         openrouter_key = os.getenv("OPENROUTER_API_KEY")
@@ -1195,8 +1200,13 @@ When recommending searches, be specific about what information you need and why 
         """
         from providers.registry import ModelProviderRegistry
 
-        # Get models from enabled providers only (those with valid API keys)
-        all_models = ModelProviderRegistry.get_available_model_names()
+        # In auto mode, present full provider model options (unrestricted)
+        if self.is_effective_auto_mode():
+            available = ModelProviderRegistry.get_available_models(respect_restrictions=False)
+            all_models = list(available.keys())
+        else:
+            # Get models from enabled providers only (those with valid API keys), respecting restrictions
+            all_models = ModelProviderRegistry.get_available_model_names()
 
         # Add OpenRouter models if OpenRouter is configured
         openrouter_key = os.getenv("OPENROUTER_API_KEY")
