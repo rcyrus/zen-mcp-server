@@ -389,18 +389,35 @@ class ModelProvider(ABC):
         # Get model configurations from the hook method
         model_configs = self.get_model_configurations()
 
+        # Pre-compute allowed alias names only when respecting restrictions
+        allowed_alias_names: set[str] = set()
+        if restriction_service and respect_restrictions:
+            allowed_set = restriction_service.get_allowed_models(self.get_provider_type())
+            if allowed_set:
+                allowed_alias_names = {name.lower() for name in allowed_set}
+
+        # Get aliases from the hook method once for reuse
+        all_aliases = self.get_all_model_aliases()
+
         for model_name in model_configs:
-            # Check restrictions if enabled
-            if restriction_service and not restriction_service.is_allowed(self.get_provider_type(), model_name):
+            allowed = True
+            if restriction_service and respect_restrictions:
+                # A model is allowed if either its canonical name is allowed OR any of its aliases are allowed
+                if restriction_service.is_allowed(self.get_provider_type(), model_name):
+                    allowed = True
+                else:
+                    # Check if any alias name is explicitly allowed
+                    alias_list = all_aliases.get(model_name, [])
+                    allowed = any(alias.lower() in allowed_alias_names for alias in alias_list)
+
+            if not allowed:
                 continue
 
             # Add the base model
             models.append(model_name)
 
-        # Get aliases from the hook method
-        all_aliases = self.get_all_model_aliases()
+        # Append aliases for models that were included
         for model_name, aliases in all_aliases.items():
-            # Only add aliases for models that passed restriction check
             if model_name in models:
                 models.extend(aliases)
 

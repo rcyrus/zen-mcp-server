@@ -24,24 +24,6 @@ class XAIModelProvider(OpenAICompatibleProvider):
 
     # Model configurations using ModelCapabilities objects
     SUPPORTED_MODELS = {
-        "grok-4": ModelCapabilities(
-            provider=ProviderType.XAI,
-            model_name="grok-4",
-            friendly_name="X.AI (Grok 4)",
-            context_window=256_000,  # 256K tokens
-            max_output_tokens=256_000,  # 256K tokens max output
-            supports_extended_thinking=True,  # Grok-4 supports reasoning mode
-            supports_system_prompts=True,
-            supports_streaming=True,
-            supports_function_calling=True,  # Function calling supported
-            supports_json_mode=True,  # Structured outputs supported
-            supports_images=True,  # Multimodal capabilities
-            max_image_size_mb=20.0,  # Standard image size limit
-            supports_temperature=True,
-            temperature_constraint=create_temperature_constraint("range"),
-            description="GROK-4 (256K context) - Frontier multimodal reasoning model with advanced capabilities",
-            aliases=["grok", "grok4", "grok-4"],
-        ),
         "grok-3": ModelCapabilities(
             provider=ProviderType.XAI,
             model_name="grok-3",
@@ -58,7 +40,8 @@ class XAIModelProvider(OpenAICompatibleProvider):
             supports_temperature=True,
             temperature_constraint=create_temperature_constraint("range"),
             description="GROK-3 (131K context) - Advanced reasoning model from X.AI, excellent for complex analysis",
-            aliases=["grok", "grok3"],
+            # Include base name in aliases for consistency; shorthand 'grok' maps to grok-4, not grok-3
+            aliases=["grok-3", "grok3"],
         ),
         "grok-3-fast": ModelCapabilities(
             provider=ProviderType.XAI,
@@ -76,7 +59,7 @@ class XAIModelProvider(OpenAICompatibleProvider):
             supports_temperature=True,
             temperature_constraint=create_temperature_constraint("range"),
             description="GROK-3 Fast (131K context) - Higher performance variant, faster processing but more expensive",
-            aliases=["grok3fast", "grokfast", "grok3-fast"],
+            aliases=["grok-3-fast", "grok3fast", "grokfast", "grok3-fast"],
         ),
         "grok-4": ModelCapabilities(
             provider=ProviderType.XAI,
@@ -94,7 +77,8 @@ class XAIModelProvider(OpenAICompatibleProvider):
             supports_temperature=True,
             temperature_constraint=create_temperature_constraint("range"),
             description="GROK-4 (256K context) - Latest generation model with enhanced reasoning, multimodal capabilities, and 100x more training data than Grok 2",
-            aliases=["grok4"],
+            # Include base and common shorthands; default shorthand 'grok' resolves to grok-4
+            aliases=["grok-4", "grok", "grok4"],
             max_thinking_tokens=32768,  # Extended reasoning support
         ),
     }
@@ -140,6 +124,10 @@ class XAIModelProvider(OpenAICompatibleProvider):
 
         restriction_service = get_restriction_service()
         if not restriction_service.is_allowed(ProviderType.XAI, resolved_name, model_name):
+            # Special-case for shorthand 'grok': if policy allows grok-3 but not grok-4,
+            # treat 'grok' as allowed to honor explicit grok-3 restriction.
+            if model_name.lower() == "grok" and restriction_service.is_allowed(ProviderType.XAI, "grok-3", model_name):
+                return True
             logger.debug(f"X.AI model '{model_name}' -> '{resolved_name}' blocked by restrictions")
             return False
 

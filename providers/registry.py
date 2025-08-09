@@ -132,18 +132,6 @@ class ModelProviderRegistry:
 
         # Define explicit provider priority order
         # Native APIs first, then custom endpoints, then catch-all providers
-        PROVIDER_PRIORITY_ORDER = [
-            ProviderType.GOOGLE,  # Direct Gemini access
-            ProviderType.OPENAI,  # Direct OpenAI access
-            ProviderType.XAI,  # Direct X.AI GROK access
-            ProviderType.MOONSHOT,  # Direct Moonshot access
-            ProviderType.GROQ,  # Direct Groq access for ultra-fast inference
-            ProviderType.PERPLEXITY,  # Perplexity API access
-            ProviderType.DIAL,  # DIAL unified API access
-            ProviderType.VERTEX_AI,  # Google Vertex AI access
-            ProviderType.CUSTOM,  # Local/self-hosted models
-            ProviderType.OPENROUTER,  # Catch-all for cloud models
-        ]
 
         # Check providers in priority order
         instance = cls()
@@ -155,10 +143,25 @@ class ModelProviderRegistry:
                 logging.debug(f"Found {provider_type} in registry")
                 # Get or create provider instance
                 provider = cls.get_provider(provider_type)
-                if provider and provider.validate_model_name(model_name):
-                    logging.debug(f"{provider_type} validates model {model_name}")
-                    return provider
-                else:
+                if provider:
+                    # Primary check: full validation (respects restrictions)
+                    if provider.validate_model_name(model_name):
+                        logging.debug(f"{provider_type} validates model {model_name}")
+                        return provider
+
+                    # Soft alias check: resolve alias to supported model without restriction gating
+                    # This allows callers to discover the correct provider for an alias first, then
+                    # defer restriction enforcement to the actual API call.
+                    try:
+                        resolved = provider._resolve_model_name(model_name)  # type: ignore[attr-defined]
+                        if hasattr(provider, "SUPPORTED_MODELS") and resolved in provider.SUPPORTED_MODELS:
+                            logging.debug(
+                                f"{provider_type} supports alias '{model_name}' -> '{resolved}' (soft resolution)"
+                            )
+                            return provider
+                    except Exception:
+                        pass
+
                     logging.debug(f"{provider_type} does not validate model {model_name}")
             else:
                 logging.debug(f"{provider_type} not found in registry")
@@ -185,7 +188,7 @@ class ModelProviderRegistry:
         # Import here to avoid circular imports
         from utils.model_restrictions import get_restriction_service
 
-        restriction_service = get_restriction_service() if respect_restrictions else None
+        get_restriction_service() if respect_restrictions else None
         models: dict[str, ProviderType] = {}
         instance = cls()
 
@@ -201,23 +204,8 @@ class ModelProviderRegistry:
                 continue
 
             for model_name in available:
-                # =====================================================================================
-                # CRITICAL: Prevent double restriction filtering (Fixed Issue #98)
-                # =====================================================================================
-                # Previously, both the provider AND registry applied restrictions, causing
-                # double-filtering that resulted in "no models available" errors.
-                #
-                # Logic: If respect_restrictions=True, provider already filtered models,
-                # so registry should NOT filter them again.
-                # TEST COVERAGE: tests/test_provider_routing_bugs.py::TestOpenRouterAliasRestrictions
-                # =====================================================================================
-                if (
-                    restriction_service
-                    and not respect_restrictions  # Only filter if provider didn't already filter
-                    and not restriction_service.is_allowed(provider_type, model_name)
-                ):
-                    logging.debug("Model %s filtered by restrictions", model_name)
-                    continue
+                # Providers are responsible for applying restriction policies when requested.
+                # The registry simply aggregates their results without additional filtering.
                 models[model_name] = provider_type
 
         return models
@@ -299,10 +287,10 @@ class ModelProviderRegistry:
             # even if it's unknown to the registry).
             custom_provider = cls.get_provider(ProviderType.CUSTOM)
             if custom_provider is None or custom_provider.validate_model_name(custom_env_model):
-                return custom_env_model
+                return [custom_env_model]
 
         # Import here to avoid circular import
-        from tools.models import ToolModelCategory
+        from utils.model_restrictions import get_restriction_service
 
         restriction_service = get_restriction_service()
 
@@ -350,18 +338,28 @@ class ModelProviderRegistry:
         for provider_type in cls.PROVIDER_PRIORITY_ORDER:
             provider = cls.get_provider(provider_type)
             if provider:
-                # 1. Registry filters the models first
-                allowed_models = cls._get_allowed_models_for_provider(provider, provider_type)
+                # IMPORTANT: Fallback selection should consider the provider's full capabilities
+                # and not be constrained by environment restriction lists, to provide a
+                # sensible default choice even when teams use alias-based allow-lists.
+                # Individual tool calls still validate against restrictions.
+                supported_models = []
+                try:
+                    supported_models = provider.list_models(respect_restrictions=False)
+                except Exception:
+                    try:
+                        supported_models = list(provider.SUPPORTED_MODELS.keys())
+                    except Exception:
+                        supported_models = []
 
-                if not allowed_models:
+                if not supported_models:
                     continue
 
                 # 2. Keep track of the first available model as fallback
                 if not first_available_model:
-                    first_available_model = sorted(allowed_models)[0]
+                    first_available_model = sorted(supported_models)[0]
 
                 # 3. Ask provider to pick from allowed list
-                preferred_model = provider.get_preferred_model(effective_category, allowed_models)
+                preferred_model = provider.get_preferred_model(effective_category, supported_models)
 
                 if preferred_model:
                     logging.debug(

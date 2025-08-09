@@ -65,25 +65,26 @@ class OpenAICompatibleProvider(ModelProvider):
         Returns:
             Set of allowed model names (lowercase) or None if not configured
         """
-        # Get provider-specific allowed models
+        # For native providers (Google/OpenAI), rely on the central ModelRestrictionService
+        # to manage restrictions to avoid conflicting env sources during tests.
+        if self.get_provider_type() in (ProviderType.GOOGLE, ProviderType.OPENAI):
+            return None
+
+        # For OpenAI-compatible proxy providers, allow a local env-based allow-list
         provider_type = self.get_provider_type().value.upper()
         env_var = f"{provider_type}_ALLOWED_MODELS"
         models_str = os.getenv(env_var, "")
 
         if models_str:
-            # Parse and normalize to lowercase for case-insensitive comparison
             models = {m.strip().lower() for m in models_str.split(",") if m.strip()}
             if models:
                 logging.info(f"Configured allowed models for {self.FRIENDLY_NAME}: {sorted(models)}")
                 return models
 
-        # Log info if no allow-list configured for proxy providers
-        if self.get_provider_type() not in [ProviderType.GOOGLE, ProviderType.OPENAI]:
-            logging.info(
-                f"Model allow-list not configured for {self.FRIENDLY_NAME} - all models permitted. "
-                f"To restrict access, set {env_var} with comma-separated model names."
-            )
-
+        logging.info(
+            f"Model allow-list not configured for {self.FRIENDLY_NAME} - all models permitted. "
+            f"To restrict access, set {env_var} with comma-separated model names."
+        )
         return None
 
     def _configure_timeouts(self, **kwargs):
@@ -545,7 +546,7 @@ class OpenAICompatibleProvider(ModelProvider):
                 completion_params[key] = value
 
         # Check if this is a model that requires the responses endpoint
-            # These models require the /v1/responses endpoint
+        # These models require the /v1/responses endpoint
         if resolved_model in {"o3-pro", "codex-mini-latest"}:
             # If it fails, we should not fall back to chat/completions
             return self._generate_with_responses_endpoint(

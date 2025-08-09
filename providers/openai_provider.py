@@ -22,60 +22,6 @@ class OpenAIModelProvider(OpenAICompatibleProvider):
 
     # Model configurations using ModelCapabilities objects
     SUPPORTED_MODELS = {
-        "gpt-5": ModelCapabilities(
-            provider=ProviderType.OPENAI,
-            model_name="gpt-5",
-            friendly_name="OpenAI (GPT-5)",
-            context_window=400_000,  # 400K tokens
-            max_output_tokens=128_000,  # 128K max output tokens
-            supports_extended_thinking=True,  # Supports reasoning tokens
-            supports_system_prompts=True,
-            supports_streaming=True,
-            supports_function_calling=True,
-            supports_json_mode=True,
-            supports_images=True,  # GPT-5 supports vision
-            max_image_size_mb=20.0,  # 20MB per OpenAI docs
-            supports_temperature=True,  # Regular models accept temperature parameter
-            temperature_constraint=create_temperature_constraint("fixed"),
-            description="GPT-5 (400K context, 128K output) - Advanced model with reasoning support",
-            aliases=["gpt5", "gpt-5"],
-        ),
-        "gpt-5-mini": ModelCapabilities(
-            provider=ProviderType.OPENAI,
-            model_name="gpt-5-mini",
-            friendly_name="OpenAI (GPT-5-mini)",
-            context_window=400_000,  # 400K tokens
-            max_output_tokens=128_000,  # 128K max output tokens
-            supports_extended_thinking=True,  # Supports reasoning tokens
-            supports_system_prompts=True,
-            supports_streaming=True,
-            supports_function_calling=True,
-            supports_json_mode=True,
-            supports_images=True,  # GPT-5-mini supports vision
-            max_image_size_mb=20.0,  # 20MB per OpenAI docs
-            supports_temperature=True,
-            temperature_constraint=create_temperature_constraint("fixed"),
-            description="GPT-5-mini (400K context, 128K output) - Efficient variant with reasoning support",
-            aliases=["gpt5-mini", "gpt5mini", "mini"],
-        ),
-        "gpt-5-nano": ModelCapabilities(
-            provider=ProviderType.OPENAI,
-            model_name="gpt-5-nano",
-            friendly_name="OpenAI (GPT-5 nano)",
-            context_window=400_000,
-            max_output_tokens=128_000,
-            supports_extended_thinking=True,
-            supports_system_prompts=True,
-            supports_streaming=True,
-            supports_function_calling=True,
-            supports_json_mode=True,
-            supports_images=True,
-            max_image_size_mb=20.0,
-            supports_temperature=True,
-            temperature_constraint=create_temperature_constraint("fixed"),
-            description="GPT-5 nano (400K context) - Fastest, cheapest version of GPT-5 for summarization and classification tasks",
-            aliases=["gpt5nano", "gpt5-nano", "nano"],
-        ),
         "o3": ModelCapabilities(
             provider=ProviderType.OPENAI,
             model_name="o3",
@@ -223,7 +169,7 @@ class OpenAIModelProvider(OpenAICompatibleProvider):
         "gpt-5-mini": ModelCapabilities(
             provider=ProviderType.OPENAI,
             model_name="gpt-5-mini",
-            friendly_name="OpenAI (GPT-5 mini)",
+            friendly_name="OpenAI (GPT-5-mini)",
             context_window=400_000,  # 400K tokens total
             max_output_tokens=128_000,  # 128K max output tokens
             supports_extended_thinking=True,  # Supports reasoning tokens
@@ -236,7 +182,8 @@ class OpenAIModelProvider(OpenAICompatibleProvider):
             supports_temperature=True,
             temperature_constraint=create_temperature_constraint("range"),
             description="GPT-5 mini (400K context) - A faster, more cost-efficient version of GPT-5 for well-defined tasks",
-            aliases=["gpt5mini", "gpt5-mini"],
+            # NOTE: "mini" is the canonical shorthand for GPT-5 mini per tests
+            aliases=["mini", "gpt5mini", "gpt5-mini", "gpt-5-mini"],
         ),
         "gpt-5-nano": ModelCapabilities(
             provider=ProviderType.OPENAI,
@@ -255,7 +202,7 @@ class OpenAIModelProvider(OpenAICompatibleProvider):
             temperature_constraint=create_temperature_constraint("range"),
             description="GPT-5 nano (400K context) - Fastest, cheapest version of GPT-5 for summarization and classification tasks",
             aliases=["gpt5nano", "gpt5-nano"],
-        )
+        ),
     }
 
     def __init__(self, api_key: str, **kwargs):
