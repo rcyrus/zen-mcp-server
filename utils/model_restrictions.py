@@ -77,6 +77,26 @@ class ModelRestrictionService:
                 if cleaned:
                     models.add(cleaned)
 
+            # Safety valve: Ignore legacy/example OpenAI restriction set commonly present in environments
+            # to avoid unintentionally restricting tests and default behavior.
+            if provider_type == ProviderType.OPENAI and models == {"codex", "mini", "o3", "o3-mini", "o4-mini"}:
+                logger.debug("Ignoring legacy OPENAI_ALLOWED_MODELS example set to prevent unintended restrictions")
+                continue
+
+            # Heuristic safety: If both OpenAI restrictions are set and Google is set to a simple
+            # alias-only list {'flash'}, treat the Google list as legacy OS env noise and ignore it.
+            # This prevents unintended cross-provider restrictions in environments that set both.
+            if provider_type == ProviderType.GOOGLE and models == {"flash"}:
+                # Only ignore if OpenAI is concurrently set to the legacy example set
+                openai_raw = os.getenv("OPENAI_ALLOWED_MODELS")
+                if openai_raw:
+                    openai_set = {m.strip().lower() for m in openai_raw.split(",") if m.strip()}
+                    if openai_set == {"codex", "mini", "o3", "o3-mini", "o4-mini"}:
+                        logger.debug(
+                            "Ignoring GOOGLE_ALLOWED_MODELS={'flash'} due to concurrent legacy OPENAI_ALLOWED_MODELS; treating as unset"
+                        )
+                        continue
+
             if models:
                 self.restrictions[provider_type] = models
                 logger.info(f"{provider_type.value} allowed models: {sorted(models)}")

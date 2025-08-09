@@ -277,6 +277,34 @@ class BaseWorkflowMixin(ABC):
         """
         return "Please provide expert analysis based on the investigation findings."
 
+    # New hook: plural form for consistency with some tools (e.g., thinkdeep)
+    def get_expert_analysis_instructions(self) -> str:
+        """
+        Get instructions to append after the expert context.
+
+        Default implementation delegates to singular form for backward compatibility.
+        Tools can override this plural form.
+        """
+        try:
+            return self.get_expert_analysis_instruction()
+        except Exception:
+            return ""
+
+    # New hook: allow tools to shape the expert prompt
+    def customize_expert_analysis_prompt(self, base_prompt: str, request, file_content: str = "") -> str:
+        """
+        Allow tools to customize the expert analysis prompt.
+
+        Args:
+            base_prompt: The prepared context (including findings and optional files)
+            request: The validated request object
+            file_content: Raw file content embedded (if any)
+
+        Returns:
+            Final prompt content to send to the expert model (excluding system prompt)
+        """
+        return base_prompt
+
     def get_request_use_assistant_model(self, request) -> bool:
         """
         Get use_assistant_model from request. Override for custom assistant model handling.
@@ -352,8 +380,8 @@ class BaseWorkflowMixin(ABC):
         except Exception as e:
             logger.warning(f"[WORKFLOW_FILES] {self.get_name()}: Could not get conversation files: {e}")
 
-        # Convert to list and remove any empty/None values
-        files_for_expert = [f for f in all_relevant_files if f and f.strip()]
+        # Convert to list, remove empties, and sort for determinism
+        files_for_expert = sorted(f for f in all_relevant_files if f and f.strip())
 
         if not files_for_expert:
             logger.debug(f"[WORKFLOW_FILES] {self.get_name()}: No relevant files found for expert analysis")
@@ -679,6 +707,10 @@ class BaseWorkflowMixin(ABC):
 
             # Create thread for first step
             if not continuation_id and request.step_number == 1:
+                # Reset state for new investigation (important for test isolation)
+                self.work_history = []
+                self.consolidated_findings = ConsolidatedFindings()
+
                 clean_args = {k: v for k, v in arguments.items() if k not in ["_model_context", "_resolved_model_name"]}
                 continuation_id = create_thread(self.get_name(), clean_args)
                 self.initial_request = request.step
@@ -1454,23 +1486,77 @@ class BaseWorkflowMixin(ABC):
             # Prepare expert analysis context
             expert_context = self.prepare_expert_analysis_context(self.consolidated_findings)
 
+            # Track file content used for expert analysis (for customization)
+            file_content = ""
+
             # Check if tool wants to include files in prompt
             if self.should_include_files_in_expert_prompt():
                 file_content = self._prepare_files_for_expert_analysis()
+
+                # Fallback 1: if preparation returned empty, reuse already embedded content from final step
+                if not file_content:
+                    try:
+                        embedded_content = self.get_embedded_file_content()
+                    except Exception:
+                        embedded_content = ""
+
+                    if embedded_content:
+                        logger.debug(
+                            f"[WORKFLOW_FILES] {self.get_name()}: Using embedded file content fallback for expert analysis"
+                        )
+                        file_content = embedded_content
+
+                # Fallback 2: if still empty, force-embed current request's relevant_files
+                if not file_content:
+                    try:
+                        current_args = self.get_current_arguments()
+                        if current_args:
+                            req = self.get_workflow_request_model()(**current_args)
+                            req_files = self.get_request_relevant_files(req)
+                            if req_files:
+                                logger.debug(
+                                    f"[WORKFLOW_FILES] {self.get_name()}: Force-embedding {len(req_files)} request relevant_files as fallback"
+                                )
+                                file_content, _ = self._force_embed_files_for_expert_analysis(req_files)
+                    except Exception as e:
+                        logger.warning(
+                            f"[WORKFLOW_FILES] {self.get_name()}: Fallback to request files failed: {e}"
+                        )
+
                 if file_content:
                     expert_context = self._add_files_to_expert_context(expert_context, file_content)
+                    # Harden behavior: make it explicit that files are present and the model should not request them again
+                    expert_context += (
+                        "\n\nIMPORTANT: All relevant file contents are embedded above. "
+                        "Do NOT respond with 'files_required_to_continue'. Proceed with thorough analysis."
+                    )
 
             # Get system prompt for this tool with localization support
             base_system_prompt = self.get_system_prompt()
             language_instruction = self.get_language_instruction()
             system_prompt = language_instruction + base_system_prompt
 
+            # Allow tools to customize the expert analysis prompt
+            customized_context = self.customize_expert_analysis_prompt(
+                expert_context, request, file_content=file_content or ""
+            )
+            if not customized_context:
+                customized_context = expert_context
+
+            # Ensure expert instructions are included regardless of system prompt embedding
+            instructions = self.get_expert_analysis_instructions() or ""
+
+            # Build final prompt text
+            prompt_body = customized_context if customized_context else expert_context
+            if instructions:
+                prompt_body = f"{prompt_body}\n\n{instructions}"
+
             # Check if tool wants system prompt embedded in main prompt
             if self.should_embed_system_prompt():
-                prompt = f"{system_prompt}\n\n{expert_context}\n\n{self.get_expert_analysis_instruction()}"
+                prompt = f"{system_prompt}\n\n{prompt_body}"
                 system_prompt = ""  # Clear it since we embedded it
             else:
-                prompt = expert_context
+                prompt = prompt_body
 
             # Validate temperature against model constraints
             validated_temperature, temp_warnings = self.get_validated_temperature(request, self._model_context)
