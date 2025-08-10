@@ -1519,9 +1519,7 @@ class BaseWorkflowMixin(ABC):
                                 )
                                 file_content, _ = self._force_embed_files_for_expert_analysis(req_files)
                     except Exception as e:
-                        logger.warning(
-                            f"[WORKFLOW_FILES] {self.get_name()}: Fallback to request files failed: {e}"
-                        )
+                        logger.warning(f"[WORKFLOW_FILES] {self.get_name()}: Fallback to request files failed: {e}")
 
                 if file_content:
                     expert_context = self._add_files_to_expert_context(expert_context, file_content)
