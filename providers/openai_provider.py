@@ -162,7 +162,7 @@ class OpenAIModelProvider(OpenAICompatibleProvider):
             supports_images=True,  # Supports text and image
             max_image_size_mb=20.0,
             supports_temperature=True,
-            temperature_constraint=create_temperature_constraint("range"),
+            temperature_constraint=create_temperature_constraint("fixed"),  # GPT-5 only supports temperature=1
             description="GPT-5 (400K context) - The best model for coding and agentic tasks across domains",
             aliases=["gpt5"],
         ),
@@ -180,7 +180,7 @@ class OpenAIModelProvider(OpenAICompatibleProvider):
             supports_images=True,  # Supports text and image
             max_image_size_mb=20.0,
             supports_temperature=True,
-            temperature_constraint=create_temperature_constraint("range"),
+            temperature_constraint=create_temperature_constraint("fixed"),  # GPT-5-mini only supports temperature=1
             description="GPT-5 mini (400K context) - A faster, more cost-efficient version of GPT-5 for well-defined tasks",
             # NOTE: "mini" is the canonical shorthand for GPT-5 mini per tests
             aliases=["mini", "gpt5mini", "gpt5-mini", "gpt-5-mini"],
@@ -199,7 +199,7 @@ class OpenAIModelProvider(OpenAICompatibleProvider):
             supports_images=True,  # Supports text and image
             max_image_size_mb=20.0,
             supports_temperature=True,
-            temperature_constraint=create_temperature_constraint("range"),
+            temperature_constraint=create_temperature_constraint("fixed"),  # GPT-5-nano only supports temperature=1
             description="GPT-5 nano (400K context) - Fastest, cheapest version of GPT-5 for summarization and classification tasks",
             aliases=["gpt5nano", "gpt5-nano"],
         ),
