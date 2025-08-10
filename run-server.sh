@@ -72,11 +72,15 @@ clear_python_cache() {
 get_venv_python_path() {
     local venv_path="$1"
     
+    # Convert to absolute path for consistent behavior across shell environments
+    local abs_venv_path
+    abs_venv_path=$(cd "$(dirname "$venv_path")" && pwd)/$(basename "$venv_path")
+
     # Check for both Unix and Windows Python executable paths
-    if [[ -f "$venv_path/bin/python" ]]; then
-        echo "$venv_path/bin/python"
-    elif [[ -f "$venv_path/Scripts/python.exe" ]]; then
-        echo "$venv_path/Scripts/python.exe"
+    if [[ -f "$abs_venv_path/bin/python" ]]; then
+        echo "$abs_venv_path/bin/python"
+    elif [[ -f "$abs_venv_path/Scripts/python.exe" ]]; then
+        echo "$abs_venv_path/Scripts/python.exe"
     else
         return 1  # No Python executable found
     fi
@@ -86,7 +90,7 @@ get_venv_python_path() {
 detect_os() {
     case "$OSTYPE" in
         darwin*)  echo "macos" ;;
-        linux*)   
+        linux*)
             if grep -qi microsoft /proc/version 2>/dev/null; then
                 echo "wsl"
             else
@@ -101,7 +105,7 @@ detect_os() {
 # Get Claude config path based on platform
 get_claude_config_path() {
     local os_type=$(detect_os)
-    
+
     case "$os_type" in
         macos)
             echo "$HOME/Library/Application Support/Claude/claude_desktop_config.json"
@@ -114,7 +118,7 @@ get_claude_config_path() {
             if command -v wslvar &> /dev/null; then
                 win_appdata=$(wslvar APPDATA 2>/dev/null)
             fi
-            
+
             if [[ -n "${win_appdata:-}" ]]; then
                 echo "$(wslpath "$win_appdata")/Claude/claude_desktop_config.json"
             else
@@ -139,13 +143,13 @@ get_claude_config_path() {
 cleanup_docker() {
     # Skip if already cleaned or Docker not available
     [[ -f "$DOCKER_CLEANED_FLAG" ]] && return 0
-    
+
     if ! command -v docker &> /dev/null || ! docker info &> /dev/null 2>&1; then
         return 0
     fi
-    
+
     local found_artifacts=false
-    
+
     # Define containers to remove
     local containers=(
         "gemini-mcp-server"
@@ -154,7 +158,7 @@ cleanup_docker() {
         "zen-mcp-redis"
         "zen-mcp-log-monitor"
     )
-    
+
     # Remove containers
     for container in "${containers[@]}"; do
         if docker ps -a --format "{{.Names}}" | grep -q "^${container}$" 2>/dev/null; then
@@ -167,7 +171,7 @@ cleanup_docker() {
             docker rm "$container" >/dev/null 2>&1 || true
         fi
     done
-    
+
     # Remove images
     local images=("gemini-mcp-server:latest" "zen-mcp-server:latest")
     for image in "${images[@]}"; do
@@ -180,7 +184,7 @@ cleanup_docker() {
             docker rmi "$image" >/dev/null 2>&1 || true
         fi
     done
-    
+
     # Remove volumes
     local volumes=("redis_data" "mcp_logs")
     for volume in "${volumes[@]}"; do
@@ -193,11 +197,11 @@ cleanup_docker() {
             docker volume rm "$volume" >/dev/null 2>&1 || true
         fi
     done
-    
+
     if [[ "$found_artifacts" == true ]]; then
         print_success "Docker cleanup complete"
     fi
-    
+
     touch "$DOCKER_CLEANED_FLAG"
 }
 
@@ -373,15 +377,15 @@ setup_env_file() {
         migrate_env_file
         return 0
     fi
-    
+
     if [[ ! -f .env.example ]]; then
         print_error ".env.example not found!"
         return 1
     fi
-    
+
     cp .env.example .env
     print_success "Created .env from .env.example"
-    
+
     # Detect sed version for cross-platform compatibility
     local sed_cmd
     if sed --version >/dev/null 2>&1; then
@@ -389,7 +393,7 @@ setup_env_file() {
     else
         sed_cmd="sed -i ''"  # BSD sed (macOS)
     fi
-    
+
     # Update API keys from environment if present
     local api_keys=(
         "GEMINI_API_KEY:your_gemini_api_key_here"
@@ -402,18 +406,18 @@ setup_env_file() {
         "VERTEX_REGION:us-central1"
         "OPENROUTER_API_KEY:your_openrouter_api_key_here"
     )
-    
+
     for key_pair in "${api_keys[@]}"; do
         local key_name="${key_pair%%:*}"
         local placeholder="${key_pair##*:}"
         local key_value="${!key_name:-}"
-        
+
         if [[ -n "$key_value" ]]; then
             $sed_cmd "s/$placeholder/$key_value/" .env
             print_success "Updated .env with $key_name from environment"
         fi
     done
-    
+
     return 0
 }
 
@@ -423,12 +427,12 @@ migrate_env_file() {
     if ! grep -q "host\.docker\.internal" .env 2>/dev/null; then
         return 0
     fi
-    
+
     print_warning "Migrating .env from Docker to standalone format..."
-    
+
     # Create backup
     cp .env .env.backup_$(date +%Y%m%d_%H%M%S)
-    
+
     # Detect sed version for cross-platform compatibility
     local sed_cmd
     if sed --version >/dev/null 2>&1; then
@@ -436,10 +440,10 @@ migrate_env_file() {
     else
         sed_cmd="sed -i ''"  # BSD sed (macOS)
     fi
-    
+
     # Replace host.docker.internal with localhost
     $sed_cmd 's/host\.docker\.internal/localhost/g' .env
-    
+
     print_success "Migrated Docker URLs to localhost in .env"
     echo "  (Backup saved as .env.backup_*)"
 }
@@ -456,12 +460,12 @@ check_api_keys() {
         "DIAL_API_KEY:your_dial_api_key_here"
         "OPENROUTER_API_KEY:your_openrouter_api_key_here"
     )
-    
+
     for key_pair in "${api_keys[@]}"; do
         local key_name="${key_pair%%:*}"
         local placeholder="${key_pair##*:}"
         local key_value="${!key_name:-}"
-        
+
         if [[ -n "$key_value" ]] && [[ "$key_value" != "$placeholder" ]]; then
             print_success "$key_name configured"
             has_key=true
@@ -486,12 +490,12 @@ check_api_keys() {
         print_success "CUSTOM_API_URL configured: $CUSTOM_API_URL"
         has_key=true
     fi
-    
+
     if [[ "$has_key" == false ]]; then
         echo "  MOONSHOT_API_KEY=your-actual-key" >&2
         echo "  GROQ_API_KEY=your-actual-key" >&2
     fi
-    
+
     return 0  # Always return success to continue setup
 }
 
@@ -504,7 +508,7 @@ check_api_keys() {
 check_claude_cli_integration() {
     local python_cmd="$1"
     local server_path="$2"
-    
+
     if ! command -v claude &> /dev/null; then
         echo ""
         print_warning "Claude CLI not found"
@@ -515,7 +519,7 @@ check_claude_cli_integration() {
             print_info "Skipping Claude Code integration"
             return 0
         fi
-        
+
         echo ""
         echo "Please install Claude Code first:"
         echo "  Visit: https://docs.anthropic.com/en/docs/claude-code/cli-usage"
@@ -523,7 +527,7 @@ check_claude_cli_integration() {
         echo "Then run this script again to register MCP."
         return 1
     fi
-    
+
     # Check if zen is registered
     local mcp_list=$(claude mcp list 2>/dev/null)
     if echo "$mcp_list" | grep -q "zen"; then
@@ -531,7 +535,7 @@ check_claude_cli_integration() {
         if echo "$mcp_list" | grep -E "zen.*docker|zen.*compose" &>/dev/null; then
             print_warning "Found old Docker-based Zen registration, updating..."
             claude mcp remove zen -s user 2>/dev/null || true
-            
+
             # Re-add with correct Python command
             if claude mcp add zen -s user -- "$python_cmd" "$server_path" 2>/dev/null; then
                 print_success "Updated Zen to become a standalone script"
@@ -551,7 +555,7 @@ check_claude_cli_integration() {
             else
                 print_warning "Zen registered with different path, updating..."
                 claude mcp remove zen -s user 2>/dev/null || true
-                
+
                 if claude mcp add zen -s user -- "$python_cmd" "$server_path" 2>/dev/null; then
                     print_success "Updated Zen with current path"
                     return 0
@@ -574,7 +578,7 @@ check_claude_cli_integration() {
             echo "  claude mcp add zen -s user -- $python_cmd $server_path"
             return 0
         fi
-        
+
         print_info "Registering Zen with Claude Code..."
         if claude mcp add zen -s user -- "$python_cmd" "$server_path" 2>/dev/null; then
             print_success "Successfully added Zen to Claude Code"
@@ -592,18 +596,18 @@ check_claude_cli_integration() {
 check_claude_desktop_integration() {
     local python_cmd="$1"
     local server_path="$2"
-    
+
     # Skip if already configured (check flag)
     if [[ -f "$DESKTOP_CONFIG_FLAG" ]]; then
         return 0
     fi
-    
+
     local config_path=$(get_claude_config_path)
     if [[ -z "$config_path" ]]; then
         print_warning "Unable to determine Claude Desktop config path for this platform"
         return 0
     fi
-    
+
     echo ""
     read -p "Configure Zen for Claude Desktop? (Y/n): " -n 1 -r
     echo ""
@@ -612,21 +616,21 @@ check_claude_desktop_integration() {
         touch "$DESKTOP_CONFIG_FLAG"  # Don't ask again
         return 0
     fi
-    
+
     # Create config directory if it doesn't exist
     local config_dir=$(dirname "$config_path")
     mkdir -p "$config_dir" 2>/dev/null || true
-    
+
     # Handle existing config
     if [[ -f "$config_path" ]]; then
         print_info "Updating existing Claude Desktop config..."
-        
+
         # Check for old Docker config and remove it
         if grep -q "docker.*compose.*zen\|zen.*docker" "$config_path" 2>/dev/null; then
             print_warning "Removing old Docker-based MCP configuration..."
             # Create backup
             cp "$config_path" "${config_path}.backup_$(date +%Y%m%d_%H%M%S)"
-            
+
             # Remove old zen config using a more robust approach
             local temp_file=$(mktemp)
             python3 -c "
@@ -636,21 +640,21 @@ import sys
 try:
     with open('$config_path', 'r') as f:
         config = json.load(f)
-    
+
     # Remove zen from mcpServers if it exists
     if 'mcpServers' in config and 'zen' in config['mcpServers']:
         del config['mcpServers']['zen']
         print('Removed old zen MCP configuration')
-    
+
     with open('$temp_file', 'w') as f:
         json.dump(config, f, indent=2)
-        
+
 except Exception as e:
     print(f'Error processing config: {e}', file=sys.stderr)
     sys.exit(1)
 " && mv "$temp_file" "$config_path"
         fi
-        
+
         # Add new config
         local temp_file=$(mktemp)
         python3 -c "
@@ -676,7 +680,7 @@ config['mcpServers']['zen'] = {
 with open('$temp_file', 'w') as f:
     json.dump(config, f, indent=2)
 " && mv "$temp_file" "$config_path"
-        
+
     else
         print_info "Creating new Claude Desktop config..."
         cat > "$config_path" << EOF
@@ -690,7 +694,7 @@ with open('$temp_file', 'w') as f:
 }
 EOF
     fi
-    
+
     if [[ $? -eq 0 ]]; then
         print_success "Successfully configured Claude Desktop"
         echo "  Config: $config_path"
@@ -717,20 +721,20 @@ EOF
 check_gemini_cli_integration() {
     local script_dir="$1"
     local zen_wrapper="$script_dir/zen-mcp-server"
-    
+
     # Check if Gemini settings file exists
     local gemini_config="$HOME/.gemini/settings.json"
     if [[ ! -f "$gemini_config" ]]; then
         # Gemini CLI not installed or not configured
         return 0
     fi
-    
+
     # Check if zen is already configured
     if grep -q '"zen"' "$gemini_config" 2>/dev/null; then
         # Already configured
         return 0
     fi
-    
+
     # Ask user if they want to add Zen to Gemini CLI
     echo ""
     read -p "Configure Zen for Gemini CLI? (Y/n): " -n 1 -r
@@ -739,7 +743,7 @@ check_gemini_cli_integration() {
         print_info "Skipping Gemini CLI integration"
         return 0
     fi
-    
+
     # Ensure wrapper script exists
     if [[ ! -f "$zen_wrapper" ]]; then
         print_info "Creating wrapper script for Gemini CLI..."
@@ -753,13 +757,13 @@ EOF
         chmod +x "$zen_wrapper"
         print_success "Created zen-mcp-server wrapper script"
     fi
-    
+
     # Update Gemini settings
     print_info "Updating Gemini CLI configuration..."
-    
+
     # Create backup
     cp "$gemini_config" "${gemini_config}.backup_$(date +%Y%m%d_%H%M%S)"
-    
+
     # Add zen configuration using Python for proper JSON handling
     local temp_file=$(mktemp)
     python3 -c "
@@ -769,24 +773,24 @@ import sys
 try:
     with open('$gemini_config', 'r') as f:
         config = json.load(f)
-    
+
     # Ensure mcpServers exists
     if 'mcpServers' not in config:
         config['mcpServers'] = {}
-    
+
     # Add zen server
     config['mcpServers']['zen'] = {
         'command': '$zen_wrapper'
     }
-    
+
     with open('$temp_file', 'w') as f:
         json.dump(config, f, indent=2)
-        
+
 except Exception as e:
     print(f'Error processing config: {e}', file=sys.stderr)
     sys.exit(1)
 " && mv "$temp_file" "$gemini_config"
-    
+
     if [[ $? -eq 0 ]]; then
         print_success "Successfully configured Gemini CLI"
         echo "  Config: $gemini_config"
@@ -811,10 +815,10 @@ EOF
 display_config_instructions() {
     local python_cmd="$1"
     local server_path="$2"
-    
+
     # Get script directory for Gemini CLI config
     local script_dir=$(dirname "$server_path")
-    
+
     echo ""
     local config_header="ZEN MCP SERVER CONFIGURATION"
     echo "===== $config_header ====="
@@ -822,11 +826,11 @@ display_config_instructions() {
     echo ""
     echo "To use Zen MCP Server with your Claude clients:"
     echo ""
-    
+
     print_info "1. For Claude Code (CLI):"
     echo -e "   ${GREEN}claude mcp add zen -s user -- $python_cmd $server_path${NC}"
     echo ""
-    
+
     print_info "2. For Claude Desktop:"
     echo "   Add this configuration to your Claude Desktop config file:"
     echo ""
@@ -840,7 +844,7 @@ display_config_instructions() {
      }
    }
 EOF
-    
+
     # Show platform-specific config location
     local config_path=$(get_claude_config_path)
     if [[ -n "$config_path" ]]; then
@@ -848,11 +852,11 @@ EOF
         print_info "   Config file location:"
         echo -e "   ${YELLOW}$config_path${NC}"
     fi
-    
+
     echo ""
     print_info "3. Restart Claude Desktop after updating the config file"
     echo ""
-    
+
     print_info "For Gemini CLI:"
     echo "   Add this configuration to ~/.gemini/settings.json:"
     echo ""
@@ -872,7 +876,7 @@ EOF
 display_setup_instructions() {
     local python_cmd="$1"
     local server_path="$2"
-    
+
     echo ""
     local setup_header="SETUP COMPLETE"
     echo "===== $setup_header ====="
@@ -921,14 +925,14 @@ show_version() {
 # Follow logs
 follow_logs() {
     local log_path="$LOG_DIR/$LOG_FILE"
-    
+
     echo "Following server logs (Ctrl+C to stop)..."
     echo ""
-    
+
     # Create logs directory and file if they don't exist
     mkdir -p "$LOG_DIR"
     touch "$log_path"
-    
+
     # Follow the log file
     tail -f "$log_path"
 }
@@ -940,7 +944,7 @@ follow_logs() {
 main() {
     # Parse command line arguments
     local arg="${1:-}"
-    
+
     case "$arg" in
         -h|--help)
             show_help
@@ -982,67 +986,67 @@ main() {
             exit 1
             ;;
     esac
-    
+
     # Display header
     local main_header="🤖 Zen MCP Server"
     echo "$main_header"
     printf '%*s\n' "${#main_header}" | tr ' ' '='
-    
+
     # Get and display version
     local version=$(get_version)
     echo "Version: $version"
     echo ""
-    
+
     # Check if venv exists
     if [[ ! -d "$VENV_PATH" ]]; then
         echo "Setting up Python environment for first time..."
     fi
-    
+
     # Step 1: Docker cleanup
     cleanup_docker
-    
+
     # Step 1.5: Clear Python cache to prevent import issues
     clear_python_cache
-    
+
     # Step 2: Setup environment file
     setup_env_file || exit 1
-    
+
     # Step 3: Source .env file
     if [[ -f .env ]]; then
         set -a
         source .env
         set +a
     fi
-    
+
     # Step 4: Check API keys (non-blocking - just warn if missing)
     check_api_keys
-    
-    # Step 5: Setup Python environment with uv
+
+    # Step 5: Setup Python environment (uv-first approach)
     local python_cmd
     python_cmd=$(setup_environment) || exit 1
-    
+
     # Step 6: Install dependencies
     install_dependencies "$python_cmd" || exit 1
-    
+
     # Step 7: Get absolute server path
     local script_dir=$(get_script_dir)
     local server_path="$script_dir/server.py"
-    
+
     # Step 8: Display setup instructions
     display_setup_instructions "$python_cmd" "$server_path"
-    
+
     # Step 9: Check Claude integrations
     check_claude_cli_integration "$python_cmd" "$server_path"
     check_claude_desktop_integration "$python_cmd" "$server_path"
-    
+
     # Step 10: Check Gemini CLI integration
     check_gemini_cli_integration "$script_dir"
-    
+
     # Step 11: Display log information
     echo ""
     echo "Logs will be written to: $script_dir/$LOG_DIR/$LOG_FILE"
     echo ""
-    
+
     # Step 12: Handle command line arguments
     if [[ "$arg" == "-f" ]] || [[ "$arg" == "--follow" ]]; then
         follow_logs
