@@ -12,8 +12,8 @@ echo "These tests use real API calls with your configured keys"
 echo ""
 
 # Activate virtual environment
-if [[ -f ".zen_venv/bin/activate" ]]; then
-    source .zen_venv/bin/activate
+if [[ -f ".venv/bin/activate" ]]; then
+    source .venv/bin/activate
     echo "✅ Using virtual environment"
 else
     echo "❌ No virtual environment found!"

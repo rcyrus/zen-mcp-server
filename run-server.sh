@@ -321,16 +321,7 @@ check_package() {
 # Install dependencies
 install_dependencies() {
     local python_cmd="$1"
-    
 
-
-
-
-
-
-    fi
-
-    fi
     # Check if pyproject.toml exists
     if [[ ! -f "pyproject.toml" ]]; then
         print_error "pyproject.toml not found!"
