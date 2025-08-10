@@ -6,7 +6,7 @@ and the generation of properly encoded JSON responses.
 import json
 import os
 import unittest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import Mock, patch
 
 from tools.analyze import AnalyzeTool
 from tools.codereview import CodeReviewTool
@@ -76,7 +76,8 @@ class TestWorkflowToolsUTF8(unittest.IsolatedAsyncioTestCase):
         mock_provider = Mock()
         mock_provider.get_provider_type.return_value = Mock(value="test")
         mock_provider.supports_thinking_mode.return_value = False
-        mock_provider.generate_content = AsyncMock(
+        # Use regular Mock instead of AsyncMock since generate_content is called synchronously
+        mock_provider.generate_content = Mock(
             return_value=Mock(
                 content=json.dumps(
                     {
@@ -132,7 +133,8 @@ class TestWorkflowToolsUTF8(unittest.IsolatedAsyncioTestCase):
         mock_provider = Mock()
         mock_provider.get_provider_type.return_value = Mock(value="test")
         mock_provider.supports_thinking_mode.return_value = False
-        mock_provider.generate_content = AsyncMock(
+        # Use regular Mock instead of AsyncMock since generate_content is called synchronously
+        mock_provider.generate_content = Mock(
             return_value=Mock(
                 content=json.dumps(
                     {
@@ -205,7 +207,8 @@ class TestWorkflowToolsUTF8(unittest.IsolatedAsyncioTestCase):
         mock_provider = Mock()
         mock_provider.get_provider_type.return_value = Mock(value="test")
         mock_provider.supports_thinking_mode.return_value = False
-        mock_provider.generate_content = AsyncMock(
+        # Use regular Mock instead of AsyncMock since generate_content is called synchronously
+        mock_provider.generate_content = Mock(
             return_value=Mock(
                 content=json.dumps(
                     {
@@ -214,14 +217,14 @@ class TestWorkflowToolsUTF8(unittest.IsolatedAsyncioTestCase):
                         "total_steps": 2,
                         "next_step_required": True,
                         "findings": (
-                            "Erreur analysée: variable 'données' non définie. " "Cause probable: import manquant."
+                            "Erreur analysée: variable 'données' non définie. Cause probable: import manquant."
                         ),
                         "files_checked": ["/src/data_processor.py"],
                         "relevant_files": ["/src/data_processor.py"],
                         "hypothesis": ("Variable 'données' not defined - missing import"),
                         "confidence": "medium",
                         "investigation_status": "in_progress",
-                        "error_analysis": ("L'erreur concerne la variable 'données' qui " "n'est pas définie."),
+                        "error_analysis": ("L'erreur concerne la variable 'données' qui n'est pas définie."),
                     },
                     ensure_ascii=False,
                 ),
