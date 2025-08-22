@@ -34,12 +34,7 @@ class ListModelsTool(BaseTool):
         return "listmodels"
 
     def get_description(self) -> str:
-        return (
-            "LIST AVAILABLE MODELS - Display all AI models organized by provider. "
-            "Shows which providers are configured, available models, their aliases, "
-            "context windows, and capabilities. Useful for understanding what models "
-            "can be used and their characteristics. MANDATORY: Must display full output to the user."
-        )
+        return "Shows which AI model providers are configured, available model names, their aliases and capabilities."
 
     def get_input_schema(self) -> dict[str, Any]:
         """Return the JSON schema for the tool's input"""

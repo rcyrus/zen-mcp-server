@@ -37,12 +37,9 @@ logger = logging.getLogger(__name__)
 # Tool-specific field descriptions for consensus workflow
 CONSENSUS_WORKFLOW_FIELD_DESCRIPTIONS = {
     "step": (
-        "In step 1: Provide the EXACT question or proposal that ALL models will evaluate. This should be phrased as a clear "
-        "question or problem statement, NOT as 'I will analyze...' or 'Let me examine...'. For example: 'Should we build a "
-        "search component in SwiftUI for use in an AppKit app?' or 'Evaluate the proposal to migrate our database from MySQL "
-        "to PostgreSQL'. This exact text will be sent to all models for their independent evaluation. "
-        "In subsequent steps (2+): This field is for internal tracking only - you can provide notes about the model response "
-        "you just received. This will NOT be sent to other models (they all receive the original proposal from step 1)."
+        "The core question for consensus. Step 1: Provide the EXACT proposal for all models to evaluate. "
+        "CRITICAL: This text is sent to all models and must be a clear question, not a self-referential statement "
+        "(e.g., use 'Evaluate...' not 'I will evaluate...'). Steps 2+: Internal notes on the last model's response; this is NOT sent to other models."
     ),
     "step_number": (
         "The index of the current step in the consensus workflow, beginning at 1. Step 1 is your analysis, "
@@ -55,11 +52,9 @@ CONSENSUS_WORKFLOW_FIELD_DESCRIPTIONS = {
     ),
     "next_step_required": ("Set to true if more models need to be consulted. False when ready for final synthesis."),
     "findings": (
-        "In step 1: Provide YOUR OWN comprehensive analysis of the proposal/question. This is where you share your "
-        "independent evaluation, considering technical feasibility, risks, benefits, and alternatives. This analysis "
-        "is NOT sent to other models - it's recorded for the final synthesis. "
-        "In steps 2+: Summarize the key points from the model response received, noting agreements and disagreements "
-        "with previous analyses."
+        "Your analysis of the consensus topic. Step 1: Your independent, comprehensive analysis of the proposal. "
+        "CRITICAL: This is for the final synthesis and is NOT sent to the other models. "
+        "Steps 2+: A summary of the key points from the most recent model's response."
     ),
     "relevant_files": (
         "Files that are relevant to the consensus analysis. Include files that help understand the proposal, "
@@ -175,22 +170,9 @@ class ConsensusTool(WorkflowTool):
 
     def get_description(self) -> str:
         return (
-            "COMPREHENSIVE CONSENSUS WORKFLOW - Step-by-step multi-model consensus with structured analysis. "
-            "This tool guides you through a systematic process where you:\n\n"
-            "1. Start with step 1: provide your own neutral analysis of the proposal\n"
-            "2. The tool will then consult each specified model one by one\n"
-            "3. You'll receive each model's response in subsequent steps\n"
-            "4. Track and synthesize perspectives as they accumulate\n"
-            "5. Final step: present comprehensive consensus and recommendations\n\n"
-            "IMPORTANT: This workflow enforces sequential model consultation:\n"
-            "- Step 1 is always your independent analysis\n"
-            "- Each subsequent step processes one model response\n"
-            "- Total steps = number of models (each step includes consultation + response)\n"
-            "- Models can have stances (for/against/neutral) for structured debate\n"
-            "- Same model can be used multiple times with different stances\n"
-            "- Each model + stance combination must be unique\n\n"
-            "Perfect for: complex decisions, architectural choices, feature proposals, "
-            "technology evaluations, strategic planning."
+            "Builds multi-model consensus through systematic analysis and structured debate. "
+            "Use for complex decisions, architectural choices, feature proposals, and technology evaluations. "
+            "Consults multiple models with different stances to synthesize comprehensive recommendations."
         )
 
     def get_system_prompt(self) -> str:
@@ -323,10 +305,11 @@ of the evidence, even when it strongly points in one direction.""",
         return schema
 
     def get_required_actions(
-        self, step_number: int, confidence: str, findings: str, total_steps: int
+        self, step_number: int, confidence: str, findings: str, total_steps: int, request=None
     ) -> list[str]:  # noqa: ARG002
         """Define required actions for each consensus phase.
 
+        Now includes request parameter for continuation-aware decisions.
         Note: confidence parameter is kept for compatibility with base class but not used.
         """
         if step_number == 1:

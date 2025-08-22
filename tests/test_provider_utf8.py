@@ -351,7 +351,7 @@ class TestLocaleModelIntegration(unittest.TestCase):
     def test_model_name_resolution_utf8(self):
         """Test model name resolution with UTF-8."""
         provider = OpenAIModelProvider(api_key="test")
-        model_names = ["gpt-4", "gemini-2.5-flash", "claude-3-opus", "o3-pro"]
+        model_names = ["gpt-4", "gemini-2.5-flash", "anthropic/claude-opus-4.1", "o3-pro"]
         for model_name in model_names:
             resolved = provider._resolve_model_name(model_name)
             self.assertIsInstance(resolved, str)
